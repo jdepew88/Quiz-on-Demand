@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatIssue, parseQuizFile, validateQuizData } from "./validation";
+import { MAX_CHOICES, MAX_DISTRACTORS, MIN_CHOICES, MIN_DISTRACTORS } from "./choices";
 
 const VALID = [
   {
@@ -22,6 +23,16 @@ function messages(data: unknown): string[] {
 }
 
 describe("valid quiz files", () => {
+  it("accepts an existing three-distractor file unchanged (legacy format)", () => {
+    // The pre-existing default. Files written against the old "exactly three" rule must
+    // keep working with no migration whatsoever.
+    const result = parseQuizFile(JSON.stringify(VALID));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.questions).toEqual(VALID);
+    expect(result.questions.every((question) => question.distractors.length === 3)).toBe(true);
+  });
+
   it("accepts the documented format", () => {
     const result = parseQuizFile(JSON.stringify(VALID));
     expect(result.ok).toBe(true);
@@ -149,7 +160,7 @@ describe("missing and blank fields", () => {
     const found = messages([{ question: 42, answer: true, distractors: "a, b, c" }]);
     expect(found[0]).toContain('"question" must be a string, but it is a number');
     expect(found[1]).toContain('"answer" must be a string, but it is a boolean');
-    expect(found[2]).toContain('"distractors" must be an array of 3 strings, but it is a string');
+    expect(found[2]).toContain('"distractors" must be an array of 2–5 strings, but it is a string');
   });
 
   it("reports a non-string distractor entry", () => {
@@ -160,21 +171,77 @@ describe("missing and blank fields", () => {
 });
 
 describe("distractor count", () => {
-  it("rejects too few", () => {
-    expect(messages([{ question: "q?", answer: "a", distractors: ["b", "c"] }])).toEqual([
-      'Question 1: "distractors" must contain exactly 3 choices, but it contains 2.',
+  /** A question with `count` unique distractors. */
+  function withDistractors(count: number) {
+    return {
+      question: "q?",
+      answer: "right",
+      distractors: Array.from({ length: count }, (_, index) => `wrong-${index + 1}`),
+    };
+  }
+
+  it.each([
+    [MIN_DISTRACTORS, MIN_CHOICES],
+    [3, 4],
+    [4, 5],
+    [MAX_DISTRACTORS, MAX_CHOICES],
+  ])("accepts %i distractors (%i total choices)", (distractorCount) => {
+    const result = validateQuizData([withDistractors(distractorCount)]);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.questions[0]?.distractors).toHaveLength(distractorCount);
+  });
+
+  it("rejects a single distractor with a message naming the minimum", () => {
+    expect(messages([withDistractors(1)])).toEqual([
+      "Question 1: Only 1 distractor supplied. At least 2 distractors are required.",
     ]);
   });
 
-  it("rejects too many", () => {
-    expect(messages([{ question: "q?", answer: "a", distractors: ["b", "c", "d", "e"] }])).toEqual([
-      'Question 1: "distractors" must contain exactly 3 choices, but it contains 4.',
+  it("rejects more than the maximum with a message naming the maximum", () => {
+    expect(messages([withDistractors(6)])).toEqual([
+      "Question 1: 6 distractors supplied. The maximum supported number is 5.",
     ]);
+  });
+
+  it("rejects a far-too-long list", () => {
+    expect(messages([withDistractors(12)])[0]).toContain(
+      "12 distractors supplied. The maximum supported number is 5.",
+    );
   });
 
   it("rejects an empty distractor array", () => {
-    expect(messages([{ question: "q?", answer: "a", distractors: [] }])[0]).toContain(
-      "but it contains 0",
+    expect(messages([{ question: "q?", answer: "a", distractors: [] }])).toEqual([
+      'Question 1: "distractors" is empty. At least 2 distractors are required.',
+    ]);
+  });
+
+  it("names the offending question when only one question is out of range", () => {
+    const found = messages([withDistractors(3), withDistractors(4), withDistractors(6)]);
+    expect(found).toEqual([
+      "Question 3: 6 distractors supplied. The maximum supported number is 5.",
+    ]);
+  });
+
+  it("accepts a quiz that mixes distractor counts across questions", () => {
+    const result = validateQuizData([
+      withDistractors(3),
+      withDistractors(4),
+      withDistractors(3),
+      withDistractors(2),
+      withDistractors(5),
+    ]);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.questions.map((question) => question.distractors.length)).toEqual([
+        3, 4, 3, 2, 5,
+      ]);
+    }
+  });
+
+  it("still reports the type when distractors is not an array", () => {
+    expect(messages([{ question: "q?", answer: "a", distractors: "b, c, d" }])[0]).toContain(
+      '"distractors" must be an array of 2–5 strings, but it is a string',
     );
   });
 });
@@ -201,6 +268,42 @@ describe("duplicate answer choices", () => {
     ]);
     expect(found).toHaveLength(1);
     expect(found[0]).toContain("Distractors 1 and 3 are the same choice");
+    expect(found[0]).toContain("Every choice must be different.");
+  });
+
+  it("catches duplicates and answer clashes at every supported count", () => {
+    expect(messages([{ question: "q?", answer: "a", distractors: ["b", "b"] }])[0]).toContain(
+      "Distractors 1 and 2 are the same choice",
+    );
+    expect(
+      messages([{ question: "q?", answer: "a", distractors: ["b", "c", "d", "e", "b"] }])[0],
+    ).toContain("Distractors 1 and 5 are the same choice");
+    expect(messages([{ question: "q?", answer: "a", distractors: ["b", "a"] }])[0]).toContain(
+      "also appears as distractor 2",
+    );
+    expect(
+      messages([{ question: "q?", answer: "a", distractors: ["b", "c", "d", "e", "a"] }])[0],
+    ).toContain("also appears as distractor 5");
+  });
+
+  it("treats whitespace- and case-different values as duplicates at any count", () => {
+    expect(
+      messages([{ question: "q?", answer: "x", distractors: ["Paris", " paris "] }])[0],
+    ).toContain("Distractors 1 and 2 are the same choice");
+    expect(
+      messages([
+        { question: "q?", answer: "x", distractors: ["a", "b", "c", "Paris", "  PARIS  "] },
+      ])[0],
+    ).toContain("Distractors 4 and 5 are the same choice");
+  });
+
+  it("rejects a blank distractor at any count", () => {
+    expect(messages([{ question: "q?", answer: "a", distractors: ["b", "   "] }])).toEqual([
+      "Question 1: Distractor 2 is blank.",
+    ]);
+    expect(
+      messages([{ question: "q?", answer: "a", distractors: ["b", "c", "d", "e", ""] }]),
+    ).toEqual(["Question 1: Distractor 5 is blank."]);
   });
 
   it("rejects three identical distractors as two pair reports", () => {

@@ -32,6 +32,11 @@ import type {
  * Correctness survives both because grading is keyed on ids, not positions:
  * `correctChoiceId` is resolved *after* the choices are shuffled, by finding where the
  * correct text actually landed.
+ *
+ * The choice count is whatever the question supplies: every distractor is rendered and
+ * none is invented, so a question always shows `distractors.length + 1` choices. Nothing
+ * here truncates a long list or pads a short one, and questions within one attempt may
+ * have different counts.
  */
 export function buildAttempt(
   source: readonly SourceQuestion[],
@@ -62,8 +67,8 @@ export function buildAttempt(
     }));
 
     const correctIndex = shuffledChoices.findIndex((choice) => choice.isCorrect);
-    // The correct answer is always one of the four entries above, so this cannot miss.
-    // Guarding anyway keeps the type honest without a non-null assertion.
+    // Exactly one entry above is flagged correct, whatever the choice count, so this
+    // cannot miss. Guarding anyway keeps the type honest without a non-null assertion.
     const correctChoice = choices[correctIndex === -1 ? 0 : correctIndex];
 
     const built: AttemptQuestion = {

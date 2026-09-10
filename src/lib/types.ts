@@ -18,13 +18,17 @@
 export interface SourceQuestion {
   question: string;
   answer: string;
-  /** Exactly three incorrect choices. */
+  /**
+   * The incorrect choices. Its length *is* this question's distractor count — between
+   * `MIN_DISTRACTORS` and `MAX_DISTRACTORS` (see `./choices`) — so questions in one quiz
+   * may supply different numbers of distractors. There is no separate count field.
+   */
   distractors: string[];
   /** Optional. Shown on the review screen after submission when present. */
   explanation?: string;
 }
 
-/** One of the four selectable choices shown for a question. */
+/** One of the selectable choices shown for a question. */
 export interface AttemptChoice {
   /**
    * Position-derived id, assigned *after* the choices are shuffled, so the id itself
@@ -45,7 +49,10 @@ export interface AttemptQuestion {
    */
   sourceIndex: number;
   prompt: string;
-  /** Always exactly four, in randomized display order. */
+  /**
+   * The correct answer plus every distractor, in randomized display order. Length is
+   * always `distractors.length + 1`, which varies per question.
+   */
   choices: AttemptChoice[];
   /** The id of the choice in `choices` whose text is the correct answer. */
   correctChoiceId: string;

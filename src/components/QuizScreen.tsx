@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ConfirmSubmitDialog } from "./ConfirmSubmitDialog";
 import { countAnswered } from "../lib/attempt";
+import { choiceLabel } from "../lib/choices";
 import type { QuizAttempt, Selections } from "../lib/types";
-
-const LETTERS = ["A", "B", "C", "D"];
 
 export function QuizScreen({
   attempt,
@@ -129,8 +128,12 @@ export function QuizScreen({
                         checked={selected}
                         onChange={() => onSelect(question.id, choice.id)}
                       />
+                      {/* Computed, so a question with five or six choices is labelled
+                          E and F rather than falling off the end of a fixed A-D list.
+                          Hidden from assistive tech: the radio's accessible name is the
+                          choice text, and a spoken "A." would only add noise. */}
                       <span className="choice__letter" aria-hidden="true">
-                        {LETTERS[choiceIndex] ?? String(choiceIndex + 1)}.
+                        {choiceLabel(choiceIndex)}.
                       </span>
                       <span className="choice__text">{choice.text}</span>
                     </label>

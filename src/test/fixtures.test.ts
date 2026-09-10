@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { formatIssue, parseQuizFile } from "../lib/validation";
+import { MAX_CHOICES, MIN_CHOICES, summarizeChoiceShape } from "../lib/choices";
 import { EXAMPLE_JSON } from "../components/FormatGuide";
 import { buildAttempt, gradeAttempt } from "../lib/attempt";
 
@@ -38,7 +39,14 @@ describe.each([
 
     const attempt = buildAttempt(result.questions, 1);
     expect(attempt.questions).toHaveLength(result.questions.length);
-    expect(attempt.questions.every((question) => question.choices.length === 4)).toBe(true);
+
+    // Each question renders its own answer plus its own distractors — no fixed count.
+    for (const question of attempt.questions) {
+      const original = result.questions[question.sourceIndex]!;
+      expect(question.choices).toHaveLength(original.distractors.length + 1);
+      expect(question.choices.length).toBeGreaterThanOrEqual(MIN_CHOICES);
+      expect(question.choices.length).toBeLessThanOrEqual(MAX_CHOICES);
+    }
 
     const perfect = gradeAttempt(
       attempt,
@@ -54,5 +62,40 @@ describe("public/sample-quiz.json", () => {
     const result = parseQuizFile(readPublic("sample-quiz.json"));
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.questions.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it("exercises more than one distractor count, so the sample demonstrates the range", () => {
+    const result = parseQuizFile(readPublic("sample-quiz.json"));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const shape = summarizeChoiceShape(result.questions)!;
+    expect(shape.uniform).toBe(false);
+    expect(shape.minDistractors).toBe(2);
+    expect(shape.maxDistractors).toBe(5);
+  });
+
+  it("still uses the recommended 3 distractors for most questions", () => {
+    const result = parseQuizFile(readPublic("sample-quiz.json"));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const threes = result.questions.filter((q) => q.distractors.length === 3).length;
+    expect(threes).toBeGreaterThan(result.questions.length / 2);
+  });
+});
+
+describe("public/quiz-template.json", () => {
+  it("leads with the recommended 3-distractor shape", () => {
+    const result = parseQuizFile(readPublic("quiz-template.json"));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.questions[0]?.distractors).toHaveLength(3);
+  });
+
+  it("also demonstrates a different count", () => {
+    const result = parseQuizFile(readPublic("quiz-template.json"));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(summarizeChoiceShape(result.questions)?.uniform).toBe(false);
   });
 });

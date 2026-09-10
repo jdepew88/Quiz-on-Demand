@@ -31,14 +31,15 @@ quiz, onboarding material at work, or twenty questions you wrote yourself five m
 | Screen | What you get |
 | --- | --- |
 | **Upload** | Drag-and-drop or a file picker, the schema explained on the page, a copyable example, downloadable template and sample files, full validation with per-question error messages, and a count of valid questions. |
-| **Quiz** | One question at a time with four choices, a progress bar, answered/remaining counts, Previous / Next, a jump-to-any-question navigator, an "unanswered" marker, and Submit. Answers can be changed until you submit. |
+| **Quiz** | One question at a time with all of its choices, a progress bar, answered/remaining counts, Previous / Next, a jump-to-any-question navigator, an "unanswered" marker, and Submit. Answers can be changed until you submit. |
 | **Confirm** | If anything is unanswered, it tells you how many and lets you go back or submit anyway. |
 | **Results** | Raw score, percentage, and the correct / incorrect / unanswered split — e.g. **42 / 50 — 84%**. |
 | **Review** | Every question with your answer, the correct answer, and a clear correct / incorrect / unanswered marker. Filterable to just the ones you missed or skipped. |
 | **Restart** | *Take again (reshuffle)* for a brand new order of the same questions, or *Upload new quiz* to start over. |
 
-Every question has exactly **one correct answer and three distractors**, so every question
-shows four choices.
+Every question has **one correct answer and 2–5 distractors**, so it shows 3–6 total
+choices. Three distractors (four choices) is the recommended default, and questions in one
+quiz may use different counts.
 
 Accessibility is built in rather than bolted on: real radio groups inside a labelled
 `fieldset` (so arrow keys work), a skip link, visible focus rings, focus moved to the
@@ -83,12 +84,58 @@ A quiz file is a **JSON array**. Each entry is one question object.
 | Property | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `question` | `string` | **yes** | The question text. Must not be blank. |
-| `answer` | `string` | **yes** | The single correct choice. Must not be blank. |
-| `distractors` | `string[]` | **yes** | Exactly **three** incorrect choices, none blank. |
+| `answer` | `string` | **yes** | The one **correct answer**. Must not be blank. |
+| `distractors` | `string[]` | **yes** | The **incorrect** choices — 2 to 5 of them, none blank. |
 | `explanation` | `string` | no | Optional. Shown on the review screen after you submit. |
 
 Unknown properties are ignored, so you can keep your own metadata (`category`,
 `difficulty`, whatever) in the file without breaking anything.
+
+### Terminology
+
+| Term | Meaning |
+| --- | --- |
+| **Correct answer** | The one choice that is actually correct — the `answer` field. |
+| **Distractor** | An incorrect answer choice — one entry in `distractors`. |
+| **Total choices** | The correct answer plus the distractors: `distractors.length + 1`. |
+
+"Distractors" always means the *incorrect* choices. The count of them is never called
+"number of answers", because that would be ambiguous about whether the correct one is
+included.
+
+### How many choices a question has
+
+**The distractor count is simply `distractors.length`.** There is no count field to set and
+no `distractorCount` property — the array already says how many there are, and a separate
+number could only ever drift out of agreement with it.
+
+| Distractors listed | Total choices rendered |
+| --- | --- |
+| 2 | 3 |
+| **3** | **4** ← recommended standard format |
+| 4 | 5 |
+| 5 | 6 |
+
+**Supported range: 2–5 distractors per question, giving 3–6 total choices per question.**
+
+**3 distractors / 4 total choices is the recommended standard format**, and files written
+that way need no changes of any kind — that was the only shape previously accepted, and it
+still behaves exactly as it did.
+
+**Different questions in the same quiz may use different valid distractor counts.** Nothing
+requires a quiz to be uniform. This is a perfectly valid file:
+
+```json
+[
+  { "question": "Two wrong options",  "answer": "A", "distractors": ["B", "C"] },
+  { "question": "Three wrong options","answer": "A", "distractors": ["B", "C", "D"] },
+  { "question": "Five wrong options", "answer": "A", "distractors": ["B", "C", "D", "E", "F"] }
+]
+```
+
+Every question renders exactly the choices it supplied. Distractors are never generated,
+fabricated, or borrowed from other questions, and a long list is never truncated nor a
+short one padded — the JSON author is in full control of the answer choices.
 
 ### Validation rules
 
@@ -104,20 +151,43 @@ number it belongs to. The following are caught:
 - a wrong type for any of them (reported with the type actually found)
 - a blank question, answer, or distractor
 - `distractors` that is not an array
-- fewer or more than three distractors
+- fewer than 2 distractors (`Question 7: Only 1 distractor supplied. At least 2 distractors are required.`)
+- more than 5 distractors (`Question 12: 6 distractors supplied. The maximum supported number is 5.`)
+- an empty `distractors` array
 - the correct answer duplicated among the distractors
 - two distractors that are the same choice
 
 Duplicate detection ignores case and surrounding whitespace, so `"Paris"` and `"  paris "`
 are treated as the same choice.
 
+Nothing is repaired silently: an out-of-range question is rejected rather than trimmed or
+topped up, and the message names the question number so it can be found in the file.
+
 ### Getting a starting file
 
 On the upload page:
 
-- **Download template JSON** → a minimal file to fill in
-- **Download sample quiz** → a working 20-question general-knowledge quiz
+- **Download template JSON** → a file to fill in, leading with the recommended 3-distractor
+  shape and then showing a 2- and a 5-distractor question
+- **Download sample quiz** → a working 20-question general-knowledge quiz that mixes counts
 - **Try the sample quiz** → loads that sample straight into the app
+
+Once a file validates, the upload screen reports its answer-choice structure. A uniform
+quiz reads:
+
+```text
+50 questions
+3 distractors per question
+4 total choices per question
+```
+
+and a mixed one reads:
+
+```text
+50 questions
+2–5 distractors per question
+3–6 total choices
+```
 
 ---
 
@@ -159,7 +229,31 @@ With the optional explanation:
 ]
 ```
 
-Any reasonable number of questions is fine — 5 or 500. There is no fixed quiz length.
+A question with a different number of distractors — 2 here, so 3 total choices:
+
+```json
+{
+  "question": "What is 2 + 2?",
+  "answer": "4",
+  "distractors": [
+    "3",
+    "5"
+  ]
+}
+```
+
+And one with 5 distractors, so 6 total choices:
+
+```json
+{
+  "question": "Which number is prime?",
+  "answer": "17",
+  "distractors": ["12", "14", "15", "18", "21"]
+}
+```
+
+Any reasonable number of questions is fine — 5 or 500. There is no fixed quiz length, and
+no fixed choice count.
 
 ---
 
@@ -175,7 +269,9 @@ Two independent shuffles happen when an attempt is built
 1. **Question order** — the primary randomization. So a 30-question file might be presented
    as question 17, then 3, then 29, then 1, then 8, and so on.
 2. **Answer-choice order** within each question, so the correct answer does not sit in the
-   same slot every time.
+   same slot every time. This is independent of how many choices the question has: with 5
+   distractors the correct answer turns up in all six positions across attempts, never
+   pinned to first, last, or slot B.
 
 Both use an unbiased **Fisher–Yates** shuffle ([`src/lib/shuffle.ts`](src/lib/shuffle.ts))
 that copies rather than mutating. Deliberately *not* `items.sort(() => Math.random() - 0.5)`
@@ -187,8 +283,11 @@ proportion, which that approach fails.
 question id, never against a position:
 
 - Each attempt question gets an id like `a1-q7` (attempt 1, display slot 7).
-- Choice ids are assigned **after** the choices are shuffled (`a1-q7-c0` … `-c3`), so an id
-  can never be used to work out which choice is correct.
+- Choice ids are assigned **after** the choices are shuffled (`a1-q7-c0` … `-c5`, as many
+  as the question has), so an id can never be used to work out which choice is correct.
+- The choice count never enters into correctness tracking: exactly one choice per question
+  is flagged correct whatever the count, so 3-, 4-, 5-, and 6-choice questions all score
+  identically.
 - `correctChoiceId` is resolved after the shuffle by finding where the correct text actually
   landed.
 
@@ -314,8 +413,8 @@ Nothing has been deployed and no GitHub repository has been created — both are
 
 | File | Purpose |
 | --- | --- |
-| [`public/sample-quiz.json`](public/sample-quiz.json) | A working 20-question general-knowledge quiz. Served at `/sample-quiz.json`, linked from the upload page, and loaded by *Try the sample quiz*. |
-| [`public/quiz-template.json`](public/quiz-template.json) | A minimal two-question template to fill in. Served at `/quiz-template.json`. |
+| [`public/sample-quiz.json`](public/sample-quiz.json) | A working 20-question general-knowledge quiz. Mostly 3 distractors, with 2-, 4-, and 5-distractor questions mixed in so the range is visible. Served at `/sample-quiz.json`, linked from the upload page, and loaded by *Try the sample quiz*. |
+| [`public/quiz-template.json`](public/quiz-template.json) | A template to fill in. Leads with the recommended 3-distractor shape, then shows a 2- and a 5-distractor question. Served at `/quiz-template.json`. |
 
 Both are checked by the test suite against the app's own validator, so a broken template
 cannot ship.
@@ -343,9 +442,11 @@ quiz-on-demand/
    │  ├─ types.ts                # SourceQuestion vs AttemptQuestion
    │  ├─ validation.ts           # Parsing + all validation rules
    │  ├─ shuffle.ts              # Fisher–Yates
+   │  ├─ choices.ts              # Choice-count range, labels, quiz-shape summary
    │  ├─ attempt.ts              # Attempt building, grading, scoring
    │  ├─ validation.test.ts
    │  ├─ shuffle.test.ts
+   │  ├─ choices.test.ts
    │  └─ attempt.test.ts
    ├─ components/
    │  ├─ UploadScreen.tsx        # Drop zone, file picker, validation results
@@ -368,13 +469,19 @@ quiz-on-demand/
 npm test
 ```
 
-104 tests across 5 files, covering:
+168 tests across 6 files, covering:
 
 - **Validation** — valid files, malformed JSON, a non-array root, an empty quiz, missing
-  fields, wrong types, blank values, wrong distractor counts, the answer duplicated among
-  distractors, duplicate distractors, correct question numbering in messages, all problems
-  collected in one pass, and that nothing is returned alongside issues (nothing silently
-  discarded).
+  fields, wrong types, blank values, the answer duplicated among distractors, duplicate
+  distractors, correct question numbering in messages, all problems collected in one pass,
+  and that nothing is returned alongside issues (nothing silently discarded).
+- **Distractor counts** — 2, 3, 4, and 5 distractors accepted; 1 and 6+ rejected with the
+  message naming the minimum or maximum; an empty array rejected; a legacy three-distractor
+  file accepted unchanged; a quiz mixing counts accepted; duplicates, answer clashes, and
+  blanks caught at every count, including whitespace- and case-equivalent duplicates.
+- **Choice rules and labels** (`src/lib/choices.test.ts`) — the supported range, the
+  recommended default, distractors-to-total-choices arithmetic, labels A–F and beyond
+  (Z then AA), and the uniform-vs-range quiz summary.
 - **Shuffle** — no mutation of the input, every element preserved exactly once, correct
   behaviour at the rng boundaries, and a statistical check that the permutation distribution
   is uniform.
@@ -384,12 +491,25 @@ npm test
   from incorrect ones, scoring independent of display position, stale selections from a
   previous attempt ignored, reshuffle correctness across repeated attempts, and percentage
   rounding.
+- **Variable counts through the engine** — each supported count rendering the right number
+  of choices, no truncation and no padding, choices only ever drawn from the question's own
+  answer and distractors, a mixed-count quiz keeping each question's own shape, exactly one
+  correct choice at every count, the correct answer reaching every slot at every count,
+  scoring and review at 3/4/5/6 total choices, and a mixed-count reshuffle leaving the
+  canonical source untouched.
 - **User journeys** (`src/test/app.test.tsx`) — the whole flow against the real components:
   upload and validation feedback, taking the quiz, changing answers, navigation, the
   unanswered-submission warning and its escape routes, results, the review screen's
-  correct/incorrect/unanswered distinction, filters, reshuffling, and quiz reset.
+  correct/incorrect/unanswered distinction, filters, reshuffling, and quiz reset. Plus, for
+  variable counts: 2/3/4/5 distractors rendering 3/4/5/6 labelled choices (A–F), a mixed
+  quiz giving each question its own count, scoring and reviewing a mixed quiz, reshuffling
+  one, the upload screen reporting a uniform count and a range, out-of-range questions
+  rejected by question number, a two-distractor question now accepted where the old
+  exactly-three rule refused it, and the on-page terminology.
 - **Shipped fixtures** — `public/sample-quiz.json`, `public/quiz-template.json`, and the
-  example printed on the upload page all validate and produce a playable, gradeable attempt.
+  example printed on the upload page all validate and produce a playable, gradeable attempt
+  whose per-question choice count matches the distractors supplied; the sample and template
+  both demonstrate more than one count while keeping 3 distractors as the majority shape.
 
 - **Accessibility scaffolding** — the skip link, a top-level heading on every screen, the
   four choices grouped under the question, choice labels that are the answer text alone, and

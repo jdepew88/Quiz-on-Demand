@@ -1,3 +1,4 @@
+import { MAX_DISTRACTORS, MIN_DISTRACTORS } from "./choices";
 import type { SourceQuestion } from "./types";
 
 /**
@@ -9,13 +10,12 @@ import type { SourceQuestion } from "./types";
  *
  * All issues are collected rather than throwing on the first one — a file with eight bad
  * questions should produce eight fixable messages in one pass.
+ *
+ * Every question needs exactly one correct answer and between `MIN_DISTRACTORS` and
+ * `MAX_DISTRACTORS` distractors. The count is read from `distractors.length`, so questions
+ * in the same file may legitimately differ from one another; nothing requires a uniform
+ * shape across the quiz.
  */
-
-/** Every question needs exactly one correct answer and exactly this many distractors. */
-export const REQUIRED_DISTRACTORS = 3;
-
-/** 1 correct answer + 3 distractors. */
-export const CHOICES_PER_QUESTION = REQUIRED_DISTRACTORS + 1;
 
 export interface ValidationIssue {
   /** 1-based position in the uploaded array. `null` for whole-file problems. */
@@ -134,6 +134,8 @@ export function validateQuizData(data: unknown): ValidationResult {
     }
 
     // --- distractors ----------------------------------------------------------------
+    // The number of entries *is* the distractor count for this question. Anything from
+    // MIN_DISTRACTORS to MAX_DISTRACTORS is accepted, and a file may mix counts freely.
     const distractors: string[] = [];
     let distractorsUsable = false;
 
@@ -141,14 +143,25 @@ export function validateQuizData(data: unknown): ValidationResult {
       add('Missing the required "distractors" property.', "distractors");
     } else if (!Array.isArray(raw.distractors)) {
       add(
-        `"distractors" must be an array of ${REQUIRED_DISTRACTORS} strings, but it is ` +
-          `${describeType(raw.distractors)}.`,
+        `"distractors" must be an array of ${MIN_DISTRACTORS}–${MAX_DISTRACTORS} strings, ` +
+          `but it is ${describeType(raw.distractors)}.`,
         "distractors",
       );
-    } else if (raw.distractors.length !== REQUIRED_DISTRACTORS) {
+    } else if (raw.distractors.length === 0) {
       add(
-        `"distractors" must contain exactly ${REQUIRED_DISTRACTORS} choices, but it contains ` +
-          `${raw.distractors.length}.`,
+        `"distractors" is empty. At least ${MIN_DISTRACTORS} distractors are required.`,
+        "distractors",
+      );
+    } else if (raw.distractors.length < MIN_DISTRACTORS) {
+      add(
+        `Only ${raw.distractors.length} distractor${raw.distractors.length === 1 ? "" : "s"} ` +
+          `supplied. At least ${MIN_DISTRACTORS} distractors are required.`,
+        "distractors",
+      );
+    } else if (raw.distractors.length > MAX_DISTRACTORS) {
+      add(
+        `${raw.distractors.length} distractors supplied. The maximum supported number is ` +
+          `${MAX_DISTRACTORS}.`,
         "distractors",
       );
     } else {
@@ -172,8 +185,9 @@ export function validateQuizData(data: unknown): ValidationResult {
 
     // --- cross-field uniqueness -----------------------------------------------------
     // Only meaningful once the individual values are known-good, otherwise a missing
-    // answer would also report as a spurious "duplicate".
-    if (distractorsUsable && distractors.length === REQUIRED_DISTRACTORS) {
+    // answer would also report as a spurious "duplicate". `distractorsUsable` already
+    // means "an in-range array whose every entry is a non-blank string".
+    if (distractorsUsable) {
       const seen = new Map<string, number>();
       distractors.forEach((text, entryIndex) => {
         const key = normalizeForComparison(text);
@@ -181,7 +195,7 @@ export function validateQuizData(data: unknown): ValidationResult {
         if (firstAt !== undefined) {
           add(
             `Distractors ${firstAt + 1} and ${entryIndex + 1} are the same choice (${quote(text)}). ` +
-              `All four choices must be different.`,
+              `Every choice must be different.`,
             "distractors",
           );
         } else {
@@ -205,7 +219,7 @@ export function validateQuizData(data: unknown): ValidationResult {
     // Only questions with no issues of their own are collected. If any issue was raised
     // anywhere in the file the whole result is rejected below, so this list is only ever
     // used on the fully-clean path.
-    if (prompt && answer && distractorsUsable && distractors.length === REQUIRED_DISTRACTORS) {
+    if (prompt && answer && distractorsUsable) {
       const explanation =
         typeof raw.explanation === "string" && raw.explanation.trim().length > 0
           ? raw.explanation.trim()

@@ -9,11 +9,27 @@ import {
 } from "./attempt";
 import type { QuizAttempt, Selections, SourceQuestion } from "./types";
 
-function makeSource(count: number): SourceQuestion[] {
+/** `count` questions, each with `distractorCount` distractors (default: the recommended 3). */
+function makeSource(count: number, distractorCount = 3): SourceQuestion[] {
   return Array.from({ length: count }, (_, index) => ({
     question: `Question ${index + 1}?`,
     answer: `correct-${index + 1}`,
-    distractors: [`wrong-a-${index + 1}`, `wrong-b-${index + 1}`, `wrong-c-${index + 1}`],
+    distractors: Array.from(
+      { length: distractorCount },
+      (_unused, wrongIndex) => `wrong-${wrongIndex + 1}-of-${index + 1}`,
+    ),
+  }));
+}
+
+/** One question per entry, with the given distractor counts in order. */
+function makeMixedSource(distractorCounts: number[]): SourceQuestion[] {
+  return distractorCounts.map((distractorCount, index) => ({
+    question: `Question ${index + 1} with ${distractorCount} distractors?`,
+    answer: `correct-${index + 1}`,
+    distractors: Array.from(
+      { length: distractorCount },
+      (_unused, wrongIndex) => `wrong-${wrongIndex + 1}-of-${index + 1}`,
+    ),
   }));
 }
 
@@ -69,18 +85,66 @@ describe("buildAttempt", () => {
     expect(anyReordered).toBe(true);
   });
 
-  it("gives every question exactly four choices: the answer plus three distractors", () => {
+  it("gives every question the answer plus every distractor it supplied", () => {
     const source = makeSource(15);
     const attempt = buildAttempt(source, 1);
 
     for (const question of attempt.questions) {
-      const original = source[question.sourceIndex];
-      expect(question.choices).toHaveLength(4);
-      expect(new Set(question.choices.map((c) => c.text)).size).toBe(4);
+      const original = source[question.sourceIndex]!;
+      const expectedChoices = original.distractors.length + 1;
+      expect(question.choices).toHaveLength(expectedChoices);
+      expect(new Set(question.choices.map((c) => c.text)).size).toBe(expectedChoices);
       expect(question.choices.map((c) => c.text).sort()).toEqual(
-        [original!.answer, ...original!.distractors].sort(),
+        [original.answer, ...original.distractors].sort(),
       );
     }
+  });
+
+  it.each([
+    [2, 3],
+    [3, 4],
+    [4, 5],
+    [5, 6],
+  ])("renders %i distractors as %i total choices", (distractorCount, expectedChoices) => {
+    const source = makeSource(6, distractorCount);
+    const attempt = buildAttempt(source, 1);
+
+    for (const question of attempt.questions) {
+      expect(question.choices).toHaveLength(expectedChoices);
+      // Exactly one choice is the correct one, whatever the count.
+      const correct = question.choices.filter((c) => c.id === question.correctChoiceId);
+      expect(correct).toHaveLength(1);
+      expect(correct[0]?.text).toBe(source[question.sourceIndex]!.answer);
+    }
+  });
+
+  it("neither truncates a long distractor list nor pads a short one", () => {
+    const source = makeMixedSource([2, 5]);
+    const attempt = buildAttempt(source, 1);
+
+    const byIndex = new Map(attempt.questions.map((q) => [q.sourceIndex, q]));
+    expect(byIndex.get(0)?.choices).toHaveLength(3);
+    expect(byIndex.get(1)?.choices).toHaveLength(6);
+
+    // Every choice text came from the question's own answer or distractors — nothing was
+    // borrowed from the other question and nothing was invented.
+    for (const question of attempt.questions) {
+      const original = source[question.sourceIndex]!;
+      const permitted = new Set([original.answer, ...original.distractors]);
+      for (const choice of question.choices) {
+        expect(permitted.has(choice.text)).toBe(true);
+      }
+    }
+  });
+
+  it("supports a quiz that mixes distractor counts across questions", () => {
+    const counts = [3, 4, 3, 2, 5];
+    const attempt = buildAttempt(makeMixedSource(counts), 1);
+
+    const shapeBySourceIndex = new Map(
+      attempt.questions.map((q) => [q.sourceIndex, q.choices.length]),
+    );
+    expect(counts.map((_, index) => shapeBySourceIndex.get(index))).toEqual([4, 5, 4, 3, 6]);
   });
 
   it("keeps correctChoiceId pointing at the correct answer text after shuffling choices", () => {
@@ -105,6 +169,24 @@ describe("buildAttempt", () => {
 
     expect([...positions].sort()).toEqual([0, 1, 2, 3]);
   });
+
+  it.each([2, 3, 4, 5])(
+    "spreads the correct answer across every slot with %i distractors",
+    (distractorCount) => {
+      const source = makeSource(1, distractorCount);
+      const positions = new Set<number>();
+
+      for (let run = 0; run < 400; run++) {
+        const question = buildAttempt(source, run + 1).questions[0]!;
+        positions.add(question.choices.findIndex((c) => c.id === question.correctChoiceId));
+      }
+
+      // Never stuck first, last, or in slot B — every position occurs.
+      expect([...positions].sort((a, b) => a - b)).toEqual(
+        Array.from({ length: distractorCount + 1 }, (_, index) => index),
+      );
+    },
+  );
 
   it("derives choice ids from the shuffled position, so an id cannot reveal the answer", () => {
     const source = makeSource(1);
@@ -150,6 +232,15 @@ describe("buildAttempt", () => {
     const attempt = buildAttempt(makeSource(1), 1);
     expect(attempt.questions).toHaveLength(1);
     expect(attempt.questions[0]?.choices).toHaveLength(4);
+  });
+
+  it("labels choice ids positionally at every supported count", () => {
+    for (const distractorCount of [2, 3, 4, 5]) {
+      const question = buildAttempt(makeSource(1, distractorCount), 1).questions[0]!;
+      expect(question.choices.map((c) => c.id.split("-").pop())).toEqual(
+        Array.from({ length: distractorCount + 1 }, (_, index) => `c${index}`),
+      );
+    }
   });
 });
 
@@ -311,6 +402,7 @@ describe("gradeAttempt", () => {
       makeSource(4)[attempt.questions[3]!.sourceIndex]!.answer,
     );
     expect(result.entries.every((entry) => entry.choices.length === 4)).toBe(true);
+    expect(result.entries.every((entry) => entry.correctText !== "")).toBe(true);
   });
 
   it("does not reveal the source question number in review entries", () => {
@@ -359,5 +451,91 @@ describe("percentages", () => {
     expect(formatPercent(84)).toBe("84%");
     expect(formatPercent(33.3)).toBe("33.3%");
     expect(formatPercent(100)).toBe("100%");
+  });
+});
+
+describe("scoring and review with variable choice counts", () => {
+  it.each([
+    [2, 3],
+    [3, 4],
+    [4, 5],
+    [5, 6],
+  ])("scores a %i-distractor / %i-choice quiz correctly", (distractorCount, expectedChoices) => {
+    const source = makeSource(12, distractorCount);
+    const attempt = buildAttempt(source, 1);
+
+    const perfect = gradeAttempt(attempt, answerAll(attempt));
+    expect(perfect).toMatchObject({ total: 12, correct: 12, incorrect: 0, percent: 100 });
+
+    const allWrong = gradeAttempt(attempt, answerAllWrong(attempt));
+    expect(allWrong).toMatchObject({ total: 12, correct: 0, incorrect: 12, percent: 0 });
+
+    expect(perfect.entries.every((entry) => entry.choices.length === expectedChoices)).toBe(true);
+  });
+
+  it("scores a mixed-count quiz correctly, question by question", () => {
+    const source = makeMixedSource([2, 3, 4, 5, 3]);
+    const attempt = buildAttempt(source, 1);
+
+    // Answer the 2- and 5-distractor questions right, the rest wrong, and leave one blank.
+    const selections: Selections = {};
+    for (const question of attempt.questions) {
+      const distractorCount = source[question.sourceIndex]!.distractors.length;
+      if (distractorCount === 2 || distractorCount === 5) {
+        selections[question.id] = question.correctChoiceId;
+      } else if (distractorCount === 4) {
+        // left unanswered
+      } else {
+        selections[question.id] = question.choices.find(
+          (choice) => choice.id !== question.correctChoiceId,
+        )!.id;
+      }
+    }
+
+    const result = gradeAttempt(attempt, selections);
+    expect(result).toMatchObject({ total: 5, correct: 2, incorrect: 2, unanswered: 1 });
+
+    for (const entry of result.entries) {
+      const question = attempt.questions.find((q) => q.id === entry.questionId)!;
+      const original = source[question.sourceIndex]!;
+      // Review carries every choice the question offered, and resolves both answers.
+      expect(entry.choices).toHaveLength(original.distractors.length + 1);
+      expect(entry.correctText).toBe(original.answer);
+      if (entry.outcome === "unanswered") {
+        expect(entry.selectedText).toBeNull();
+      } else {
+        expect(entry.selectedText).not.toBeNull();
+      }
+    }
+  });
+
+  it("keeps exactly one correct choice per question at every count", () => {
+    for (const distractorCount of [2, 3, 4, 5]) {
+      const attempt = buildAttempt(makeSource(20, distractorCount), 1);
+      for (const question of attempt.questions) {
+        const correct = question.choices.filter((c) => c.id === question.correctChoiceId);
+        expect(correct).toHaveLength(1);
+      }
+    }
+  });
+
+  it("reshuffles a mixed-count quiz without changing any question's choice count", () => {
+    const counts = [2, 3, 4, 5, 3, 2];
+    const source = makeMixedSource(counts);
+    const snapshot = structuredClone(source);
+
+    for (let attemptNumber = 1; attemptNumber <= 5; attemptNumber++) {
+      const attempt = buildAttempt(source, attemptNumber);
+
+      for (const question of attempt.questions) {
+        expect(question.choices).toHaveLength(counts[question.sourceIndex]! + 1);
+      }
+
+      // Grading still perfect after every reshuffle.
+      expect(gradeAttempt(attempt, answerAll(attempt)).correct).toBe(counts.length);
+    }
+
+    // The canonical source is untouched by any of it.
+    expect(source).toEqual(snapshot);
   });
 });

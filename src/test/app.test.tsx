@@ -97,7 +97,8 @@ describe("upload screen", () => {
     render(<App />);
 
     expect(screen.getByRole("heading", { name: /quiz file format/i })).toBeInTheDocument();
-    expect(screen.getByText(/"distractors"/)).toBeInTheDocument();
+    // Two examples are shown now: the recommended 3-distractor one and a shorter one.
+    expect(screen.getAllByText(/"distractors"/).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByRole("link", { name: /download template json/i })).toHaveAttribute(
       "download",
       "quiz-template.json",
@@ -135,13 +136,20 @@ describe("upload screen", () => {
   });
 
   it("refuses a malformed file and names the offending question", async () => {
-    await upload(quizFile([QUIZ[0], { question: "Broken?", answer: "a", distractors: ["b", "c"] }]));
+    await upload(quizFile([QUIZ[0], { question: "Broken?", answer: "a", distractors: ["b"] }]));
 
     expect(await screen.findByText(/could not be used/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/Question 2: "distractors" must contain exactly 3 choices/i),
+      screen.getByText(/Question 2: Only 1 distractor supplied\. At least 2 distractors/i),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /start quiz/i })).not.toBeInTheDocument();
+  });
+
+  it("accepts a two-distractor question that the old exactly-three rule rejected", async () => {
+    await upload(quizFile([QUIZ[0], { question: "Fine?", answer: "a", distractors: ["b", "c"] }]));
+
+    expect(await screen.findByText(/2 valid questions detected/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /start quiz/i })).toBeEnabled();
   });
 
   it("refuses invalid JSON", async () => {
@@ -173,10 +181,11 @@ describe("upload screen", () => {
 });
 
 describe("quiz screen", () => {
-  it("shows progress, the question, and exactly four choices", async () => {
+  it("shows progress, the question, and one choice per answer supplied", async () => {
     await startQuiz();
 
     expect(screen.getByText("Question 1 of 3")).toBeInTheDocument();
+    // The default fixture uses the recommended 3 distractors, so 4 total choices.
     expect(screen.getAllByRole("radio")).toHaveLength(4);
     expect(screen.getByRole("progressbar")).toHaveAttribute(
       "aria-valuetext",
@@ -461,7 +470,7 @@ describe("accessibility scaffolding", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveAccessibleName(/your score/i);
   });
 
-  it("groups the four choices under the question text", async () => {
+  it("groups every choice under the question text", async () => {
     await startQuiz();
     const group = screen.getByRole("group");
     expect(group).toHaveAccessibleName(currentQuestionText());
@@ -494,5 +503,188 @@ describe("accessibility scaffolding", () => {
   it("does not steal focus on first load", () => {
     render(<App />);
     expect(document.body).toHaveFocus();
+  });
+});
+
+describe("variable distractor counts", () => {
+  /** One question with `count` distractors, answer text is always "right". */
+  function question(count: number, label: string) {
+    return {
+      question: `${label} (${count} distractors)?`,
+      answer: `right-${label}`,
+      distractors: Array.from({ length: count }, (_, index) => `wrong-${label}-${index + 1}`),
+    };
+  }
+
+  /** Read the choices currently on screen in display order. */
+  function visibleChoices(): string[] {
+    return screen
+      .getAllByRole("radio")
+      .map((radio) => radio.closest("label")?.querySelector(".choice__text")?.textContent ?? "");
+  }
+
+  /** The A./B./C. letters currently rendered, in order. */
+  function visibleLetters(): string[] {
+    return Array.from(document.querySelectorAll(".choice__letter")).map(
+      (node) => node.textContent ?? "",
+    );
+  }
+
+  it.each([
+    [2, 3, ["A.", "B.", "C."]],
+    [3, 4, ["A.", "B.", "C.", "D."]],
+    [4, 5, ["A.", "B.", "C.", "D.", "E."]],
+    [5, 6, ["A.", "B.", "C.", "D.", "E.", "F."]],
+  ])(
+    "renders %i distractors as %i choices labelled through the end of the list",
+    async (count, expectedChoices, expectedLetters) => {
+      await startQuiz([question(count, "q1")]);
+
+      expect(screen.getAllByRole("radio")).toHaveLength(expectedChoices);
+      expect(visibleLetters()).toEqual(expectedLetters);
+
+      // Exactly the supplied answers, nothing invented and nothing dropped.
+      expect(visibleChoices().sort()).toEqual(
+        [`right-q1`, ...Array.from({ length: count }, (_, i) => `wrong-q1-${i + 1}`)].sort(),
+      );
+    },
+  );
+
+  it("renders each question with its own choice count in one mixed quiz", async () => {
+    const mixed = [
+      question(2, "two"),
+      question(3, "three"),
+      question(4, "four"),
+      question(5, "five"),
+    ];
+    const user = await startQuiz(mixed);
+
+    const seen = new Map<string, number>();
+    for (let step = 0; step < mixed.length; step++) {
+      const prompt = currentQuestionText();
+      seen.set(prompt, screen.getAllByRole("radio").length);
+      if (step < mixed.length - 1) await user.click(screen.getByRole("button", { name: /next/i }));
+    }
+
+    // Whatever order they were shuffled into, each question showed distractors + 1.
+    for (const entry of mixed) {
+      expect(seen.get(entry.question)).toBe(entry.distractors.length + 1);
+    }
+    expect(seen.size).toBe(4);
+  });
+
+  it("scores and reviews a mixed quiz correctly", async () => {
+    const mixed = [question(2, "two"), question(5, "five"), question(4, "four")];
+    const answers = new Map(mixed.map((entry) => [entry.question, entry.answer]));
+    const user = await startQuiz(mixed);
+
+    // Answer every question correctly, wherever it landed and however many choices it has.
+    for (let step = 0; step < mixed.length; step++) {
+      const correct = answers.get(currentQuestionText())!;
+      await user.click(screen.getByRole("radio", { name: correct }));
+      if (step < mixed.length - 1) await user.click(screen.getByRole("button", { name: /next/i }));
+    }
+
+    const dialog = await openSubmitDialog(user);
+    await user.click(within(dialog).getByRole("button", { name: /submit quiz/i }));
+
+    expect(screen.getByText("3 / 3")).toBeInTheDocument();
+    expect(screen.getByText("100%")).toBeInTheDocument();
+    expect(reviewItems("correct")).toHaveLength(3);
+
+    // Each review card lists that question's own choices, and marks one as correct.
+    const cardSizes = reviewItems().map((card) => within(card).getAllByRole("listitem").length);
+    expect(cardSizes.sort()).toEqual([3, 5, 6]);
+    for (const card of reviewItems()) {
+      expect(within(card).getByText("Your answer · Correct")).toBeInTheDocument();
+    }
+  });
+
+  it("reshuffles a mixed quiz and still scores it", async () => {
+    const mixed = [question(2, "two"), question(5, "five")];
+    const answers = new Map(mixed.map((entry) => [entry.question, entry.answer]));
+    const user = await startQuiz(mixed);
+
+    await openSubmitDialog(user);
+    await user.click(screen.getByRole("button", { name: /submit anyway/i }));
+    expect(screen.getByText("0 / 2")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /take again \(reshuffle\)/i }));
+
+    for (let step = 0; step < mixed.length; step++) {
+      const prompt = currentQuestionText();
+      // Choice count still matches this question after a reshuffle.
+      const expected = mixed.find((entry) => entry.question === prompt)!.distractors.length + 1;
+      expect(screen.getAllByRole("radio")).toHaveLength(expected);
+      await user.click(screen.getByRole("radio", { name: answers.get(prompt)! }));
+      if (step < mixed.length - 1) await user.click(screen.getByRole("button", { name: /next/i }));
+    }
+
+    const dialog = await openSubmitDialog(user);
+    await user.click(within(dialog).getByRole("button", { name: /submit quiz/i }));
+    expect(screen.getByText("2 / 2")).toBeInTheDocument();
+    expect(screen.getByText(/attempt 2/i)).toBeInTheDocument();
+  });
+
+  it("reports a uniform quiz's structure on the upload screen", async () => {
+    await upload(quizFile([question(3, "a"), question(3, "b")]));
+
+    expect(await screen.findByText("2 questions")).toBeInTheDocument();
+    expect(screen.getByText("3 distractors per question")).toBeInTheDocument();
+    expect(screen.getByText("4 total choices per question")).toBeInTheDocument();
+  });
+
+  it("reports a mixed quiz's structure as a range", async () => {
+    await upload(
+      quizFile([question(2, "a"), question(3, "b"), question(4, "c"), question(5, "d")]),
+    );
+
+    expect(await screen.findByText("4 questions")).toBeInTheDocument();
+    expect(screen.getByText("2–5 distractors per question")).toBeInTheDocument();
+    expect(screen.getByText("3–6 total choices")).toBeInTheDocument();
+  });
+
+  it("rejects a question with too few distractors, naming the question", async () => {
+    await upload(quizFile([question(3, "ok"), question(1, "thin")]));
+
+    expect(
+      await screen.findByText(
+        /Question 2: Only 1 distractor supplied\. At least 2 distractors are required\./i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /start quiz/i })).not.toBeInTheDocument();
+  });
+
+  it("rejects a question with too many distractors, naming the question", async () => {
+    await upload(quizFile([question(3, "ok"), question(3, "ok2"), question(6, "fat")]));
+
+    expect(
+      await screen.findByText(
+        /Question 3: 6 distractors supplied\. The maximum supported number is 5\./i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /start quiz/i })).not.toBeInTheDocument();
+  });
+
+  it("explains the distractor terminology and the supported range on the upload page", () => {
+    render(<App />);
+
+    expect(screen.getByText(/Distractors are incorrect answer choices\./i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Total choices = 1 correct answer \+ distractors\./i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/3 distractors \+ 1 correct answer = 4 total choices is the recommended/i),
+    ).toBeInTheDocument();
+    // The shorter 2-distractor example proves the count is not fixed at three.
+    const codeBlocks = Array.from(document.querySelectorAll("pre.code")).map(
+      (node) => node.textContent ?? "",
+    );
+    expect(codeBlocks.some((text) => text.includes('"distractors"'))).toBe(true);
+    expect(
+      codeBlocks.some(
+        (text) => text.includes('"3"') && text.includes('"5"') && !text.includes('"6"'),
+      ),
+    ).toBe(true);
   });
 });

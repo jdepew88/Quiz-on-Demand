@@ -560,6 +560,30 @@ pre.code {
   font-variant-numeric: tabular-nums;
 }
 
+/* Answer-choice structure reported after a file validates: question count, distractor
+   count (or range), and total choices (or range). */
+.shape-summary {
+  list-style: none;
+  padding: 0.7rem 0.9rem;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-inset);
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.shape-summary li:first-child {
+  font-weight: 650;
+}
+
+.shape-summary li:not(:first-child) {
+  color: var(--text-muted);
+}
+
 .schema-table {
   width: 100%;
   border-collapse: collapse;

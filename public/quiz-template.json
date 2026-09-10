@@ -2,12 +2,25 @@
   {
     "question": "Replace this with your question.",
     "answer": "Correct answer",
-    "distractors": ["Incorrect answer 1", "Incorrect answer 2", "Incorrect answer 3"]
+    "distractors": ["Incorrect answer 1", "Incorrect answer 2", "Incorrect answer 3"],
+    "explanation": "3 distractors + 1 correct answer = 4 total choices. This is the recommended default. The explanation field is optional and is shown on the review screen after you submit."
   },
   {
-    "question": "Add as many questions as you like. Each one needs exactly three distractors.",
-    "answer": "Correct answer",
-    "distractors": ["Incorrect answer 1", "Incorrect answer 2", "Incorrect answer 3"],
-    "explanation": "The explanation field is optional. When present it is shown on the review screen after you submit."
+    "question": "Questions may offer fewer choices. How many distractors does this one list?",
+    "answer": "2 distractors, so 3 total choices",
+    "distractors": ["3 distractors, so 4 total choices", "5 distractors, so 6 total choices"],
+    "explanation": "The length of the distractors array is the distractor count - there is no separate count field to set."
+  },
+  {
+    "question": "Or more choices. Questions in one quiz do not have to match each other.",
+    "answer": "5 distractors, so 6 total choices",
+    "distractors": [
+      "2 distractors, so 3 total choices",
+      "3 distractors, so 4 total choices",
+      "4 distractors, so 5 total choices",
+      "6 distractors, so 7 total choices",
+      "1 distractor, so 2 total choices"
+    ],
+    "explanation": "Supported range: 2-5 distractors, which is 3-6 total choices per question."
   }
 ]

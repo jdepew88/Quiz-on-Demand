@@ -1,7 +1,8 @@
-import { useCallback, useId, useRef, useState } from "react";
+import { useCallback, useId, useMemo, useRef, useState } from "react";
 import { FormatGuide, SAMPLE_FILE } from "./FormatGuide";
 import { PrivacyNote } from "./PrivacyNote";
 import { formatIssue, parseQuizFile, type ValidationResult } from "../lib/validation";
+import { describeChoiceShape, summarizeChoiceShape } from "../lib/choices";
 import type { SourceQuestion } from "../lib/types";
 
 /** Beyond this the list stops being a to-do list and starts being a wall. */
@@ -73,6 +74,15 @@ export function UploadScreen({
 
   const questionCount = loaded?.result.ok ? loaded.result.questions.length : 0;
 
+  // Report the answer-choice structure back, so the author can see at a glance whether the
+  // file is shaped the way they meant — a stray fourth distractor in one question shows up
+  // here as a range rather than passing unnoticed.
+  const shape = useMemo(
+    () => (loaded?.result.ok ? summarizeChoiceShape(loaded.result.questions) : null),
+    [loaded],
+  );
+  const shapeLabels = shape ? describeChoiceShape(shape) : null;
+
   return (
     <div className="stack">
       <div className="hero">
@@ -143,6 +153,15 @@ export function UploadScreen({
               <strong>{loaded.name} looks good.</strong>{" "}
               {questionCount} valid question{questionCount === 1 ? "" : "s"} detected.
             </div>
+
+            {shapeLabels && (
+              <ul className="shape-summary">
+                <li>{shapeLabels.questions}</li>
+                <li>{shapeLabels.distractors}</li>
+                <li>{shapeLabels.choices}</li>
+              </ul>
+            )}
+
             <p className="small muted">
               Questions and answer choices are shuffled fresh each time you start.
             </p>

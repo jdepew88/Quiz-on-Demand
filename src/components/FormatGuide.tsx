@@ -1,4 +1,19 @@
-import { REQUIRED_DISTRACTORS } from "../lib/validation";
+import {
+  MAX_CHOICES,
+  MAX_DISTRACTORS,
+  MIN_CHOICES,
+  MIN_DISTRACTORS,
+  RECOMMENDED_CHOICES,
+  RECOMMENDED_DISTRACTORS,
+} from "../lib/choices";
+
+/**
+ * On-page schema documentation.
+ *
+ * Wording rule: a **distractor** is an incorrect choice, the **correct answer** is the one
+ * right choice, and **total choices** is the two added together. "Answers" on its own is
+ * never used for the incorrect ones — it is the ambiguity that makes a schema hard to read.
+ */
 
 /** Shown verbatim on the upload page so a quiz can be written without reading the README. */
 export const EXAMPLE_JSON = `[
@@ -22,6 +37,16 @@ export const EXAMPLE_JSON = `[
   }
 ]`;
 
+/** A second, shorter example proving the count is not fixed at three. */
+export const SHORT_EXAMPLE_JSON = `{
+  "question": "What is 2 + 2?",
+  "answer": "4",
+  "distractors": [
+    "3",
+    "5"
+  ]
+}`;
+
 /** Static files served from /public. Both are plain downloads — no JavaScript required. */
 export const TEMPLATE_FILE = "/quiz-template.json";
 export const SAMPLE_FILE = "/sample-quiz.json";
@@ -34,9 +59,23 @@ export function FormatGuide({ onLoadSample }: { onLoadSample: () => void }) {
           Quiz file format
         </h2>
         <p className="muted small" style={{ marginTop: "0.35rem" }}>
-          A quiz is a JSON array. Every entry is one question with exactly one correct answer
-          and exactly {REQUIRED_DISTRACTORS} wrong answers, so every question shows four
-          choices.
+          A quiz is a JSON array. Each entry is one question with one correct answer and a
+          list of distractors.
+        </p>
+      </div>
+
+      <div className="notice">
+        <p>
+          <strong>Distractors are incorrect answer choices.</strong>
+        </p>
+        <p style={{ marginTop: "0.3rem" }}>
+          <strong>Total choices = 1 correct answer + distractors.</strong>
+        </p>
+        <p className="small muted" style={{ marginTop: "0.45rem" }}>
+          {RECOMMENDED_DISTRACTORS} distractors + 1 correct answer = {RECOMMENDED_CHOICES} total
+          choices is the recommended default. A question may supply anywhere from{" "}
+          {MIN_DISTRACTORS} to {MAX_DISTRACTORS} distractors ({MIN_CHOICES}–{MAX_CHOICES} total
+          choices), and different questions in the same quiz may use different counts.
         </p>
       </div>
 
@@ -74,7 +113,10 @@ export function FormatGuide({ onLoadSample }: { onLoadSample: () => void }) {
               </td>
               <td>string[]</td>
               <td>Yes</td>
-              <td>Exactly {REQUIRED_DISTRACTORS} incorrect choices.</td>
+              <td>
+                The incorrect choices — {MIN_DISTRACTORS} to {MAX_DISTRACTORS} of them. How many
+                you list is how many this question gets; there is no count field to set.
+              </td>
             </tr>
             <tr>
               <td>
@@ -91,12 +133,15 @@ export function FormatGuide({ onLoadSample }: { onLoadSample: () => void }) {
       <div>
         <h3 style={{ fontSize: "0.95rem", marginBottom: "0.4rem" }}>Rules</h3>
         <ul className="rules">
-          <li>The top level must be an array — start the file with <code>[</code>.</li>
+          <li>
+            The top level must be an array — start the file with <code>[</code>.
+          </li>
           <li>Every question needs all three required properties, and none may be blank.</li>
           <li>
-            <code>distractors</code> must contain exactly {REQUIRED_DISTRACTORS} entries.
+            <code>distractors</code> must hold at least {MIN_DISTRACTORS} and at most{" "}
+            {MAX_DISTRACTORS} entries.
           </li>
-          <li>All four choices must be different from each other.</li>
+          <li>Every choice must be different — including the correct answer.</li>
           <li>Any number of questions is fine — 5 or 500.</li>
         </ul>
       </div>
@@ -105,6 +150,14 @@ export function FormatGuide({ onLoadSample }: { onLoadSample: () => void }) {
         <h3 style={{ fontSize: "0.95rem", marginBottom: "0.4rem" }}>Example</h3>
         <pre className="code">
           <code>{EXAMPLE_JSON}</code>
+        </pre>
+        <p className="small muted" style={{ marginTop: "0.5rem" }}>
+          Both questions above use {RECOMMENDED_DISTRACTORS} distractors, so each shows{" "}
+          {RECOMMENDED_CHOICES} choices. To offer fewer, list fewer — this question shows{" "}
+          {MIN_CHOICES}:
+        </p>
+        <pre className="code" style={{ marginTop: "0.5rem" }}>
+          <code>{SHORT_EXAMPLE_JSON}</code>
         </pre>
       </div>
 

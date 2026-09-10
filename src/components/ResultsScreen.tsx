@@ -1,9 +1,8 @@
 import { useMemo, useState } from "react";
 import { PrivacyNote } from "./PrivacyNote";
 import { formatPercent } from "../lib/attempt";
+import { choiceLabel } from "../lib/choices";
 import type { QuizResult, ReviewEntry, ReviewOutcome } from "../lib/types";
-
-const LETTERS = ["A", "B", "C", "D"];
 
 type Filter = "all" | "incorrect" | "unanswered";
 
@@ -157,7 +156,7 @@ function ReviewCard({ entry }: { entry: ReviewEntry }) {
           return (
             <li key={choice.id} className={className}>
               <span className="review-choice__marker" aria-hidden="true">
-                {isCorrect ? "✓" : isChosenAndWrong ? "✕" : LETTERS[choiceIndex] ?? "•"}
+                {isCorrect ? "✓" : isChosenAndWrong ? "✕" : choiceLabel(choiceIndex)}
               </span>
               <span className="choice__text">{choice.text}</span>
               {/* Both tags can apply to the same row when the answer was right; the text
