@@ -411,6 +411,7 @@ for SPA deep links (verified with `wrangler dev`).
 | `Permissions-Policy` | every listed feature `=()` | Camera, microphone, geolocation, payment, USB, sensors, and similar are unused, so they are switched off for this page and anything it could embed. |
 | `Cross-Origin-Opener-Policy` | `same-origin` | Puts the app in its own browsing-context group, so a cross-origin window cannot keep a handle on it. |
 | `Cross-Origin-Resource-Policy` | `same-origin` | Other sites cannot pull the app's scripts, styles, or JSON into their pages. Direct links and downloads still work. |
+| `Strict-Transport-Security` | `max-age=31536000` | Browsers remember for a year to use only HTTPS for this hostname. See the scope note below. |
 
 The Content-Security-Policy:
 
@@ -434,14 +435,19 @@ needed:
 keywords, or if an inline script or style attribute is added to `index.html` (the policy
 would block it in production).
 
+**`Strict-Transport-Security` scope.** The header is deliberately `max-age` only. Without
+`includeSubDomains` or `preload` it binds only the exact hostname that sends it, so it is
+safe on `*.workers.dev` and on any custom domain without affecting anything else on that
+domain. On `*.workers.dev` it is mostly redundant, because the whole `.dev` top-level domain
+is on the browser HSTS preload list, but it costs nothing and scanners such as
+securityheaders.com look for it. If the app moves to a custom domain and you want
+domain-wide HSTS, set `includeSubDomains` / `preload` in the Cloudflare zone
+(**SSL/TLS → Edge Certificates → HSTS**), not here: those flags bind every subdomain of
+that domain for the whole `max-age`, and a header in this repo cannot know what else runs
+there.
+
 **Deliberately not set:**
 
-- **`Strict-Transport-Security`.** On `*.workers.dev` it would add nothing: the whole `.dev`
-  top-level domain is on the browser HSTS preload list, so browsers already refuse plain HTTP
-  there (hstspreload.org lists `workers.dev` as preloaded via `dev`). On a custom domain,
-  HSTS belongs in the Cloudflare zone (**SSL/TLS → Edge Certificates → HSTS**). Its
-  `max-age`, `includeSubDomains`, and `preload` settings bind every subdomain of that domain,
-  often for a year or more, and a header in this repo cannot know what else runs there.
 - **`Cross-Origin-Embedder-Policy`.** Only needed for cross-origin isolation
   (`SharedArrayBuffer`, high-resolution timers), which the app does not use, and it would
   block any cross-origin resource added later.

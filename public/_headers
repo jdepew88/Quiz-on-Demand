@@ -22,9 +22,12 @@
 # Uploaded quiz files are read with File.text(), which CSP does not restrict. The download
 # links are plain same-origin navigations, which CSP does not restrict either.
 #
-# Deliberately omitted (see README "Security headers"): Strict-Transport-Security,
-# Cross-Origin-Embedder-Policy, X-XSS-Protection, require-trusted-types-for,
-# report-uri / report-to.
+# Strict-Transport-Security is max-age only, with no includeSubDomains or preload: it pins
+# just the hostname that serves this app to HTTPS, never sibling subdomains of a shared
+# domain. Those two flags belong in the Cloudflare zone settings (see README).
+#
+# Deliberately omitted (see README "Security headers"): Cross-Origin-Embedder-Policy,
+# X-XSS-Protection, require-trusted-types-for, report-uri / report-to.
 /*
   Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
@@ -33,3 +36,4 @@
   Permissions-Policy: accelerometer=(), autoplay=(), browsing-topics=(), camera=(), clipboard-read=(), display-capture=(), encrypted-media=(), fullscreen=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), usb=(), xr-spatial-tracking=()
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-origin
+  Strict-Transport-Security: max-age=31536000

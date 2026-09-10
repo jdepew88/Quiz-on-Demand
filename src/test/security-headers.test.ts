@@ -84,8 +84,8 @@ describe("required headers", () => {
     expect(HEADERS.get(name)).toBe(value);
   });
 
-  it("does not set Strict-Transport-Security (a deliberate decision — see README)", () => {
-    expect(HEADERS.has("strict-transport-security")).toBe(false);
+  it("sets Strict-Transport-Security for this hostname only (max-age, no includeSubDomains or preload — see README)", () => {
+    expect(HEADERS.get("strict-transport-security")).toBe("max-age=31536000");
   });
 
   it("does not set the obsolete X-XSS-Protection header", () => {
