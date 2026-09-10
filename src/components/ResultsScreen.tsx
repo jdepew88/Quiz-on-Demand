@@ -1,16 +1,19 @@
-import { useMemo, useState } from "react";
-import { PrivacyNote } from "./PrivacyNote";
+import { useMemo, useRef, useState } from "react";
+import { IconCheck, IconMinus, IconRefresh, IconX } from "./Icons";
 import { formatPercent } from "../lib/attempt";
 import { choiceLabel } from "../lib/choices";
 import type { QuizResult, ReviewEntry, ReviewOutcome } from "../lib/types";
 
 type Filter = "all" | "incorrect" | "unanswered";
 
-const OUTCOME_LABEL: Record<ReviewOutcome, string> = {
-  correct: "Correct",
-  incorrect: "Incorrect",
-  unanswered: "Unanswered",
+/** Every outcome carries a word and an icon, never colour alone. */
+const OUTCOME: Record<ReviewOutcome, { label: string; Icon: typeof IconCheck }> = {
+  correct: { label: "Correct", Icon: IconCheck },
+  incorrect: { label: "Incorrect", Icon: IconX },
+  unanswered: { label: "Unanswered", Icon: IconMinus },
 };
+
+const OUTCOME_ORDER: ReviewOutcome[] = ["correct", "incorrect", "unanswered"];
 
 export function ResultsScreen({
   result,
@@ -26,117 +29,140 @@ export function ResultsScreen({
   onNewQuiz: () => void;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
+  const reviewHeadingRef = useRef<HTMLHeadingElement>(null);
 
   const visible = useMemo(() => {
     if (filter === "all") return result.entries;
     return result.entries.filter((entry) => entry.outcome === filter);
   }, [filter, result.entries]);
 
+  function goToReview() {
+    const heading = reviewHeadingRef.current;
+    if (!heading) return;
+    const reduceMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    heading.scrollIntoView?.({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+    heading.focus({ preventScroll: true });
+  }
+
+  const filters: [Filter, string, number][] = [
+    ["all", "All", result.total],
+    ["incorrect", "Incorrect", result.incorrect],
+    ["unanswered", "Unanswered", result.unanswered],
+  ];
+
   return (
-    <div className="stack">
-      <section className="card score-card" aria-labelledby="score-heading">
-        <h1 id="score-heading" style={{ fontSize: "1.1rem", color: "var(--text-muted)" }}>
+    <div className="container container--reading results">
+      <section className="score" aria-labelledby="score-heading">
+        <h1 id="score-heading" className="score__eyebrow">
           Your score
         </h1>
-        <p className="score-card__raw">
-          {result.correct} / {result.total}
+
+        <p className="score__raw">
+          <span className="score__visual" aria-hidden="true">
+            {result.correct}
+            <span className="score__of"> / {result.total}</span>
+          </span>
+          <span className="visually-hidden">
+            {result.correct} out of {result.total} correct
+          </span>
         </p>
-        <p className="score-card__percent">{formatPercent(result.percent)}</p>
-        <p className="small muted" style={{ marginTop: "0.5rem" }}>
-          {sourceName} · attempt {attemptNumber}
+        <p className="score__percent">{formatPercent(result.percent)}</p>
+
+        {result.total > 0 && (
+          <div className="score-bar" aria-hidden="true">
+            {OUTCOME_ORDER.map((key) =>
+              result[key] > 0 ? (
+                <span
+                  key={key}
+                  className={`score-bar__segment score-bar__segment--${key}`}
+                  style={{ flexGrow: result[key] }}
+                />
+              ) : null,
+            )}
+          </div>
+        )}
+
+        <dl className="tally">
+          {OUTCOME_ORDER.map((key) => (
+            <div key={key} className={`tally__item tally__item--${key}`}>
+              <dt>{OUTCOME[key].label}</dt>
+              <dd>{result[key]}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <p className="score__meta">
+          {sourceName} · Attempt {attemptNumber}
         </p>
 
-        <div className="stat-grid">
-          <div className="stat stat--correct">
-            <p className="stat__value">{result.correct}</p>
-            <p className="stat__label">Correct</p>
-          </div>
-          <div className="stat stat--incorrect">
-            <p className="stat__value">{result.incorrect}</p>
-            <p className="stat__label">Incorrect</p>
-          </div>
-          <div className="stat stat--unanswered">
-            <p className="stat__value">{result.unanswered}</p>
-            <p className="stat__label">Unanswered</p>
-          </div>
-          <div className="stat">
-            <p className="stat__value">{result.total}</p>
-            <p className="stat__label">Questions</p>
-          </div>
-        </div>
-
-        <div className="btn-row" style={{ justifyContent: "center", marginTop: "1.4rem" }}>
-          <button type="button" className="btn btn--lg" onClick={onRetake}>
-            Take again (reshuffle)
+        <div className="score__actions">
+          <button type="button" className="btn btn--primary btn--lg" onClick={goToReview}>
+            Review answers
           </button>
-          <button type="button" className="btn btn--secondary btn--lg" onClick={onNewQuiz}>
-            Upload new quiz
+          <button type="button" className="btn btn--secondary btn--lg" onClick={onRetake}>
+            <IconRefresh size={18} /> Take again (reshuffle)
+          </button>
+          <button type="button" className="btn btn--quiet btn--lg" onClick={onNewQuiz}>
+            New quiz
           </button>
         </div>
       </section>
 
-      <section className="stack--tight" aria-labelledby="review-heading">
-        <h2 id="review-heading" style={{ fontSize: "1.3rem" }}>
-          Review
-        </h2>
-        <p className="muted small">
-          Every question from this attempt, in the order you saw it. Reshuffling produces a new
-          order.
-        </p>
+      <section className="review" aria-labelledby="review-heading">
+        <div className="review__header">
+          <div>
+            <h2 id="review-heading" className="section-title" ref={reviewHeadingRef} tabIndex={-1}>
+              Review
+            </h2>
+            <p className="review__intro">
+              Every question in the order you saw it. Taking the quiz again reshuffles.
+            </p>
+          </div>
 
-        <div className="filter-row" role="group" aria-label="Filter reviewed questions">
-          {(
-            [
-              ["all", `All ${result.total}`],
-              ["incorrect", `Incorrect ${result.incorrect}`],
-              ["unanswered", `Unanswered ${result.unanswered}`],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              className="filter-btn"
-              aria-pressed={filter === value}
-              onClick={() => setFilter(value)}
-            >
-              {label}
-            </button>
-          ))}
+          <div className="segmented" role="group" aria-label="Filter reviewed questions">
+            {filters.map(([value, label, count]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={filter === value}
+                onClick={() => setFilter(value)}
+              >
+                {label} <span className="segmented__count">{count}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {visible.length === 0 ? (
-          <p className="notice notice--success" style={{ marginTop: "0.9rem" }}>
+          <p className="review__empty">
             Nothing to show with this filter.{" "}
             {filter === "incorrect" && result.incorrect === 0 && "You did not miss a single question."}
-            {filter === "unanswered" &&
-              result.unanswered === 0 &&
-              "You answered every question."}
+            {filter === "unanswered" && result.unanswered === 0 && "You answered every question."}
           </p>
         ) : (
-          <ul className="review-list" style={{ marginTop: "0.9rem" }}>
+          <ul className="review-list">
             {visible.map((entry) => (
               <ReviewCard key={entry.questionId} entry={entry} />
             ))}
           </ul>
         )}
       </section>
-
-      <PrivacyNote />
     </div>
   );
 }
 
 function ReviewCard({ entry }: { entry: ReviewEntry }) {
+  const { label, Icon } = OUTCOME[entry.outcome];
+
   return (
     <li className={`review-item review-item--${entry.outcome}`}>
       <div className="review-item__head">
-        <span className="badge">Question {entry.displayNumber}</span>
-        <span className={`badge badge--${entry.outcome}`}>
-          <span aria-hidden="true">
-            {entry.outcome === "correct" ? "✓" : entry.outcome === "incorrect" ? "✕" : "—"}
-          </span>
-          {OUTCOME_LABEL[entry.outcome]}
+        <span className="outcome">
+          <Icon size={16} /> {label}
         </span>
+        <span className="review-item__number">Question {entry.displayNumber}</span>
       </div>
 
       <p className="review-item__prompt">{entry.prompt}</p>
@@ -156,9 +182,15 @@ function ReviewCard({ entry }: { entry: ReviewEntry }) {
           return (
             <li key={choice.id} className={className}>
               <span className="review-choice__marker" aria-hidden="true">
-                {isCorrect ? "✓" : isChosenAndWrong ? "✕" : choiceLabel(choiceIndex)}
+                {isCorrect ? (
+                  <IconCheck size={14} />
+                ) : isChosenAndWrong ? (
+                  <IconX size={14} />
+                ) : (
+                  choiceLabel(choiceIndex)
+                )}
               </span>
-              <span className="choice__text">{choice.text}</span>
+              <span className="review-choice__text">{choice.text}</span>
               {/* Both tags can apply to the same row when the answer was right; the text
                   spells that out so it does not rely on colour alone. */}
               {isCorrect && (
@@ -173,12 +205,15 @@ function ReviewCard({ entry }: { entry: ReviewEntry }) {
       </ul>
 
       {entry.outcome === "unanswered" && (
-        <p className="small muted" style={{ marginTop: "0.6rem" }}>
-          You did not answer this question.
-        </p>
+        <p className="review-item__note">You did not answer this question.</p>
       )}
 
-      {entry.explanation && <p className="review-item__explanation">{entry.explanation}</p>}
+      {entry.explanation && (
+        <div className="explanation">
+          <p className="explanation__label">Explanation</p>
+          <p className="explanation__text">{entry.explanation}</p>
+        </div>
+      )}
     </li>
   );
 }

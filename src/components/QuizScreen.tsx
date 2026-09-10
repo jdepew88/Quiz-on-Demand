@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ConfirmSubmitDialog } from "./ConfirmSubmitDialog";
+import { IconArrowLeft, IconArrowRight, IconCheck } from "./Icons";
 import { countAnswered } from "../lib/attempt";
 import { choiceLabel } from "../lib/choices";
 import type { QuizAttempt, Selections } from "../lib/types";
 
+/**
+ * The quiz screen. The question is the visual centre; progress sits in a slim sticky bar
+ * above it, and navigation below it is deliberately quieter than the answer choices.
+ *
+ * Nothing on this screen styles a choice by correctness — the correct answer is not
+ * detectable before submission, from the markup or from the pixels.
+ */
 export function QuizScreen({
   attempt,
   selections,
@@ -62,48 +70,55 @@ export function QuizScreen({
       </h1>
 
       <div className="quiz-bar">
-        <div className="shell">
-          <div className="quiz-bar__inner">
-            <div className="quiz-bar__meta">
-              <span className="quiz-bar__count">
-                Question {index + 1} of {total}
-              </span>
-              <span className="small muted">
-                {answered} answered · {unanswered} remaining
-              </span>
-            </div>
-            <div className="btn-row">
-              <button type="button" className="btn btn--secondary" onClick={onExit}>
-                Upload new quiz
-              </button>
-              <button type="button" className="btn btn--success" onClick={() => setConfirming(true)}>
-                Submit quiz
-              </button>
-            </div>
+        <div className="container container--reading quiz-bar__inner">
+          <p className="quiz-bar__status">
+            <span className="quiz-bar__count">
+              Question {index + 1} of {total}
+            </span>
+            <span className="quiz-bar__answered">
+              {answered} answered · {unanswered} remaining
+            </span>
+          </p>
+          <div className="quiz-bar__actions">
+            <button type="button" className="btn btn--quiet btn--sm" onClick={onExit}>
+              New quiz
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              onClick={() => setConfirming(true)}
+            >
+              Submit quiz
+            </button>
           </div>
-          <div
-            className="progress"
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={total}
-            aria-valuenow={answered}
-            aria-valuetext={`${answered} of ${total} questions answered`}
-            aria-label="Quiz progress"
-            style={{ marginBottom: "0.8rem" }}
-          >
-            <div className="progress__fill" style={{ width: `${percentComplete}%` }} />
-          </div>
+        </div>
+        <div
+          className="progress"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={total}
+          aria-valuenow={answered}
+          aria-valuetext={`${answered} of ${total} questions answered`}
+          aria-label="Quiz progress"
+        >
+          <div className="progress__fill" style={{ width: `${percentComplete}%` }} />
         </div>
       </div>
 
-      <div className="shell quiz-layout">
-        <div>
-          <section className="card">
-            <div className="question-card__head">
-              <span className="badge">
-                Question {index + 1} / {total}
-              </span>
-              {!selectedChoiceId && <span className="badge badge--unanswered">Not answered yet</span>}
+      <div className="container container--reading quiz">
+        <div className="question-card">
+          {/* Keyed on the question so each one enters with a brief fade — the change of
+              question is felt, not just read in the progress bar. */}
+          <div key={question.id} className="question-card__inner">
+            <div className="question-card__meta">
+              <span className="question-card__number">Question {index + 1}</span>
+              {selectedChoiceId ? (
+                <span className="status-pill status-pill--done">
+                  <IconCheck size={14} /> Answered
+                </span>
+              ) : (
+                <span className="status-pill status-pill--pending">Not answered yet</span>
+              )}
             </div>
 
             <fieldset className="question-fieldset">
@@ -120,61 +135,75 @@ export function QuizScreen({
                       className={`choice${selected ? " choice--selected" : ""}`}
                       htmlFor={choice.id}
                     >
+                      {/* The native radio stays in charge of semantics and keyboard
+                          behaviour (arrow keys move between choices); it is stretched
+                          invisibly over the whole card so every pixel is a tap target. */}
                       <input
                         type="radio"
+                        className="choice__input"
                         id={choice.id}
                         name={question.id}
                         value={choice.id}
                         checked={selected}
                         onChange={() => onSelect(question.id, choice.id)}
                       />
-                      {/* Computed, so a question with five or six choices is labelled
-                          E and F rather than falling off the end of a fixed A-D list.
+                      {/* Computed, so a question with five or six choices is labelled E
+                          and F rather than falling off the end of a fixed A-D list.
                           Hidden from assistive tech: the radio's accessible name is the
-                          choice text, and a spoken "A." would only add noise. */}
+                          choice text, and a spoken letter would only add noise. */}
                       <span className="choice__letter" aria-hidden="true">
-                        {choiceLabel(choiceIndex)}.
+                        {choiceLabel(choiceIndex)}
                       </span>
                       <span className="choice__text">{choice.text}</span>
+                      <span className="choice__check" aria-hidden="true">
+                        <IconCheck size={18} />
+                      </span>
                     </label>
                   );
                 })}
               </div>
             </fieldset>
 
-            <p className="small muted" style={{ marginTop: "0.9rem" }}>
-              You can change any answer until you submit.
-            </p>
+            <p className="quiz-hint">You can change any answer until you submit.</p>
+          </div>
 
-            <nav className="quiz-nav" aria-label="Question navigation">
-              <button
-                type="button"
-                className="btn btn--secondary"
-                onClick={() => goTo(index - 1)}
-                disabled={index === 0}
-              >
-                ← Previous
+          <nav className="quiz-nav" aria-label="Question navigation">
+            <button
+              type="button"
+              className="btn btn--quiet"
+              onClick={() => goTo(index - 1)}
+              disabled={index === 0}
+            >
+              <IconArrowLeft size={18} /> Previous
+            </button>
+            {isLast ? (
+              <button type="button" className="btn btn--primary" onClick={() => setConfirming(true)}>
+                Submit quiz
               </button>
-              {isLast ? (
-                <button type="button" className="btn btn--success" onClick={() => setConfirming(true)}>
-                  Submit quiz
-                </button>
-              ) : (
-                <button type="button" className="btn" onClick={() => goTo(index + 1)}>
-                  Next →
-                </button>
-              )}
-            </nav>
-          </section>
+            ) : (
+              <button type="button" className="btn btn--secondary" onClick={() => goTo(index + 1)}>
+                Next <IconArrowRight size={18} />
+              </button>
+            )}
+          </nav>
         </div>
 
-        <aside className="card" aria-labelledby="navigator-heading">
-          <h2 className="card__title" id="navigator-heading" style={{ fontSize: "1rem" }}>
-            All questions
-          </h2>
-          <p className="small muted">
-            {answered} of {total} answered
-          </p>
+        <aside className="navigator" aria-labelledby="navigator-heading">
+          <div className="navigator__head">
+            <h2 className="navigator__title" id="navigator-heading">
+              All questions
+            </h2>
+            <p className="navigator__legend">
+              <span>
+                <span className="navigator__swatch navigator__swatch--answered" aria-hidden="true" />
+                Answered
+              </span>
+              <span>
+                <span className="navigator__swatch" aria-hidden="true" />
+                Unanswered
+              </span>
+            </p>
+          </div>
 
           <div className="navigator__grid">
             {attempt.questions.map((item, itemIndex) => {
@@ -200,17 +229,6 @@ export function QuizScreen({
               );
             })}
           </div>
-
-          <p className="navigator__legend">
-            <span>
-              <span className="navigator__swatch navigator__swatch--answered" aria-hidden="true" />
-              Answered
-            </span>
-            <span>
-              <span className="navigator__swatch navigator__swatch--unanswered" aria-hidden="true" />
-              Unanswered
-            </span>
-          </p>
         </aside>
       </div>
 

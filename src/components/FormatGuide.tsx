@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import { IconDownload } from "./Icons";
 import {
   MAX_CHOICES,
   MAX_DISTRACTORS,
@@ -8,7 +10,11 @@ import {
 } from "../lib/choices";
 
 /**
- * On-page schema documentation.
+ * The quiz-file format guide.
+ *
+ * Visually subordinate to using the app: it sits below the upload area, leads with three
+ * plain-language terms and one example, and keeps the full field reference behind a
+ * disclosure. Written for someone who has never opened a JSON file.
  *
  * Wording rule: a **distractor** is an incorrect choice, the **correct answer** is the one
  * right choice, and **total choices** is the two added together. "Answers" on its own is
@@ -51,127 +57,160 @@ export const SHORT_EXAMPLE_JSON = `{
 export const TEMPLATE_FILE = "/quiz-template.json";
 export const SAMPLE_FILE = "/sample-quiz.json";
 
-export function FormatGuide({ onLoadSample }: { onLoadSample: () => void }) {
+/** Colour JSON keys and string values; punctuation stays plain. Text content is unchanged. */
+function highlightJson(source: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+
+  for (const match of source.matchAll(/"(?:[^"\\]|\\.)*"(\s*:)?/g)) {
+    const start = match.index ?? 0;
+    if (start > cursor) nodes.push(source.slice(cursor, start));
+
+    const colon = match[1] ?? "";
+    const token = match[0].slice(0, match[0].length - colon.length);
+    nodes.push(
+      <span key={start} className={colon ? "tok-key" : "tok-string"}>
+        {token}
+      </span>,
+    );
+    if (colon) nodes.push(colon);
+    cursor = start + match[0].length;
+  }
+
+  nodes.push(source.slice(cursor));
+  return nodes;
+}
+
+function JsonBlock({ source }: { source: string }) {
+  // Focusable so keyboard users can scroll it if a narrow screen makes it overflow.
   return (
-    <section className="card stack" aria-labelledby="format-heading">
-      <div>
-        <h2 className="card__title" id="format-heading">
+    <pre className="code" tabIndex={0}>
+      <code>{highlightJson(source)}</code>
+    </pre>
+  );
+}
+
+export function FormatGuide() {
+  return (
+    <section id="format-guide" className="guide" aria-labelledby="format-heading">
+      <header className="guide__header">
+        <p className="eyebrow">Write your own</p>
+        <h2 id="format-heading" className="section-title">
           Quiz file format
         </h2>
-        <p className="muted small" style={{ marginTop: "0.35rem" }}>
-          A quiz is a JSON array. Each entry is one question with one correct answer and a
-          list of distractors.
+        <p className="guide__intro">
+          A quiz is a plain-text JSON file — a list of questions, each with its correct answer and
+          a few wrong ones. Any text editor can make one.
         </p>
-      </div>
+      </header>
 
-      <div className="notice">
-        <p>
-          <strong>Distractors are incorrect answer choices.</strong>
-        </p>
-        <p style={{ marginTop: "0.3rem" }}>
-          <strong>Total choices = 1 correct answer + distractors.</strong>
-        </p>
-        <p className="small muted" style={{ marginTop: "0.45rem" }}>
-          {RECOMMENDED_DISTRACTORS} distractors + 1 correct answer = {RECOMMENDED_CHOICES} total
-          choices is the recommended default. A question may supply anywhere from{" "}
-          {MIN_DISTRACTORS} to {MAX_DISTRACTORS} distractors ({MIN_CHOICES}–{MAX_CHOICES} total
-          choices), and different questions in the same quiz may use different counts.
-        </p>
-      </div>
+      <dl className="terms">
+        <div className="term">
+          <dt>Correct answer</dt>
+          <dd>
+            The one right choice. It goes in <code>answer</code>.
+          </dd>
+        </div>
+        <div className="term">
+          <dt>Distractors</dt>
+          <dd>
+            Distractors are incorrect answer choices. List {MIN_DISTRACTORS} to {MAX_DISTRACTORS} of
+            them in <code>distractors</code>.
+          </dd>
+        </div>
+        <div className="term">
+          <dt>Total choices</dt>
+          <dd>Total choices = 1 correct answer + distractors. That is what appears on screen.</dd>
+        </div>
+      </dl>
 
-      <div className="table-scroll">
-        <table className="schema-table">
-          <caption className="visually-hidden">Properties of a question object</caption>
-          <thead>
-            <tr>
-              <th scope="col">Property</th>
-              <th scope="col">Type</th>
-              <th scope="col">Required</th>
-              <th scope="col">Description</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>
-                <code>question</code>
-              </td>
-              <td>string</td>
-              <td>Yes</td>
-              <td>The question text shown to the person taking the quiz.</td>
-            </tr>
-            <tr>
-              <td>
-                <code>answer</code>
-              </td>
-              <td>string</td>
-              <td>Yes</td>
-              <td>The one correct choice.</td>
-            </tr>
-            <tr>
-              <td>
-                <code>distractors</code>
-              </td>
-              <td>string[]</td>
-              <td>Yes</td>
-              <td>
-                The incorrect choices — {MIN_DISTRACTORS} to {MAX_DISTRACTORS} of them. How many
-                you list is how many this question gets; there is no count field to set.
-              </td>
-            </tr>
-            <tr>
-              <td>
-                <code>explanation</code>
-              </td>
-              <td>string</td>
-              <td>No</td>
-              <td>Optional note shown on the review screen after you submit.</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <p className="formula">
+        <span className="formula__term">{RECOMMENDED_DISTRACTORS} distractors</span>{" "}
+        <span className="formula__op">+</span>{" "}
+        <span className="formula__term">1 correct answer</span>{" "}
+        <span className="formula__op">=</span>{" "}
+        <span className="formula__term formula__term--result">{RECOMMENDED_CHOICES} total choices</span>{" "}
+        <span className="formula__tag">Recommended</span>
+      </p>
+      <p className="guide__note">
+        Recommended, not required: a question may list {MIN_DISTRACTORS}–{MAX_DISTRACTORS}{" "}
+        distractors ({MIN_CHOICES}–{MAX_CHOICES} total choices), and questions in the same quiz can
+        differ.
+      </p>
 
-      <div>
-        <h3 style={{ fontSize: "0.95rem", marginBottom: "0.4rem" }}>Rules</h3>
-        <ul className="rules">
-          <li>
-            The top level must be an array — start the file with <code>[</code>.
-          </li>
-          <li>Every question needs all three required properties, and none may be blank.</li>
-          <li>
-            <code>distractors</code> must hold at least {MIN_DISTRACTORS} and at most{" "}
-            {MAX_DISTRACTORS} entries.
-          </li>
-          <li>Every choice must be different — including the correct answer.</li>
-          <li>Any number of questions is fine — 5 or 500.</li>
-        </ul>
-      </div>
+      <figure className="example">
+        <figcaption className="example__caption">
+          <span>Example quiz file</span>
+          <a className="text-link" href={SAMPLE_FILE} download="sample-quiz.json">
+            <IconDownload size={16} /> Download sample quiz
+          </a>
+        </figcaption>
+        <JsonBlock source={EXAMPLE_JSON} />
+      </figure>
 
-      <div>
-        <h3 style={{ fontSize: "0.95rem", marginBottom: "0.4rem" }}>Example</h3>
-        <pre className="code">
-          <code>{EXAMPLE_JSON}</code>
-        </pre>
-        <p className="small muted" style={{ marginTop: "0.5rem" }}>
-          Both questions above use {RECOMMENDED_DISTRACTORS} distractors, so each shows{" "}
-          {RECOMMENDED_CHOICES} choices. To offer fewer, list fewer — this question shows{" "}
-          {MIN_CHOICES}:
-        </p>
-        <pre className="code" style={{ marginTop: "0.5rem" }}>
-          <code>{SHORT_EXAMPLE_JSON}</code>
-        </pre>
-      </div>
+      <details className="more">
+        <summary className="more__summary">
+          <span>Every field, the rules, and a shorter example</span>
+          <span className="more__chevron" aria-hidden="true" />
+        </summary>
 
-      <div className="btn-row">
-        <a className="btn btn--ghost" href={TEMPLATE_FILE} download="quiz-template.json">
-          Download template JSON
-        </a>
-        <a className="btn btn--ghost" href={SAMPLE_FILE} download="sample-quiz.json">
-          Download sample quiz
-        </a>
-        <button type="button" className="btn btn--secondary" onClick={onLoadSample}>
-          Try the sample quiz
-        </button>
-      </div>
+        <div className="more__body">
+          <h3 className="more__heading">Fields</h3>
+          <dl className="fields">
+            <div className="field">
+              <dt>
+                <code>question</code> <span className="field__tag">Required</span>
+              </dt>
+              <dd>The question text shown to the person taking the quiz.</dd>
+            </div>
+            <div className="field">
+              <dt>
+                <code>answer</code> <span className="field__tag">Required</span>
+              </dt>
+              <dd>The one correct choice.</dd>
+            </div>
+            <div className="field">
+              <dt>
+                <code>distractors</code> <span className="field__tag">Required</span>
+              </dt>
+              <dd>
+                A list of {MIN_DISTRACTORS}–{MAX_DISTRACTORS} incorrect choices. How many you list
+                is how many that question shows — there is no count to set.
+              </dd>
+            </div>
+            <div className="field">
+              <dt>
+                <code>explanation</code>{" "}
+                <span className="field__tag field__tag--optional">Optional</span>
+              </dt>
+              <dd>A note shown when reviewing answers after you submit.</dd>
+            </div>
+          </dl>
+
+          <h3 className="more__heading">Rules</h3>
+          <ul className="rules">
+            <li>
+              The file is a list: it starts with <code>[</code> and ends with <code>]</code>.
+            </li>
+            <li>
+              Every question needs <code>question</code>, <code>answer</code>, and{" "}
+              <code>distractors</code>, and none of them may be blank.
+            </li>
+            <li>Every choice in a question must be different — including the correct answer.</li>
+            <li>Any number of questions works — 5 or 500.</li>
+            <li>
+              If anything is wrong, nothing is skipped: you get every problem, listed by question
+              number.
+            </li>
+          </ul>
+
+          <h3 className="more__heading">A question with fewer choices</h3>
+          <p className="more__text">
+            List two distractors and the question shows {MIN_CHOICES} choices:
+          </p>
+          <JsonBlock source={SHORT_EXAMPLE_JSON} />
+        </div>
+      </details>
     </section>
   );
 }

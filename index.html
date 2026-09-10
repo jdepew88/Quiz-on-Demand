@@ -4,12 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f6f2ea" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1b1a18" media="(prefers-color-scheme: dark)" />
     <meta
       name="description"
-      content="Upload a JSON quiz file, take a randomized quiz, and review your score. Your file is processed locally in your browser and is never uploaded."
+      content="Upload a JSON quiz file, take it in a fresh random order, and review what you missed. Your file is processed locally in your browser and is never uploaded."
     />
     <title>Quiz on Demand</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- Applies a remembered light/dark choice before first paint. A file rather than inline
+         code, because the production CSP allows scripts from this origin only. -->
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

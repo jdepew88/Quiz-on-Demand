@@ -30,23 +30,30 @@ quiz, onboarding material at work, or twenty questions you wrote yourself five m
 
 | Screen | What you get |
 | --- | --- |
-| **Upload** | Drag-and-drop or a file picker, the schema explained on the page, a copyable example, downloadable template and sample files, full validation with per-question error messages, and a count of valid questions. |
-| **Quiz** | One question at a time with all of its choices, a progress bar, answered/remaining counts, Previous / Next, a jump-to-any-question navigator, an "unanswered" marker, and Submit. Answers can be changed until you submit. |
+| **Upload** | A short hero, then one prominent drop zone (drag and drop, the file picker, or tap anywhere on it on a phone), the sample quiz, and a template download. A valid file becomes a *Ready to begin* card with a title taken from the file name, the question count, and its answer-choice shape; an invalid one gets a readable list of every problem, by question number. The format guide sits below, out of the way until you need it. |
+| **Quiz** | One question at a time, set as the centre of the page, with large lettered answer cards (A–F), a slim sticky progress bar with answered/remaining counts, quieter Previous / Next, a jump-to-any-question grid, and Submit. Answers can be changed until you submit. |
 | **Confirm** | If anything is unanswered, it tells you how many and lets you go back or submit anyway. |
-| **Results** | Raw score, percentage, and the correct / incorrect / unanswered split — e.g. **42 / 50 — 84%**. |
+| **Results** | The score first — e.g. **26 / 30 — 87%** — with correct, incorrect, and unanswered counts, then *Review answers*, *Take again (reshuffle)*, and *New quiz*. |
 | **Review** | Every question with your answer, the correct answer, and a clear correct / incorrect / unanswered marker. Filterable to just the ones you missed or skipped. |
-| **Restart** | *Take again (reshuffle)* for a brand new order of the same questions, or *Upload new quiz* to start over. |
+| **Restart** | *Take again (reshuffle)* for a brand new order of the same questions, or *New quiz* to start over. |
 
 Every question has **one correct answer and 2–5 distractors**, so it shows 3–6 total
 choices. Three distractors (four choices) is the recommended default, and questions in one
 quiz may use different counts.
 
-Accessibility is built in rather than bolted on: real radio groups inside a labelled
-`fieldset` (so arrow keys work), a skip link, visible focus rings, focus moved to the
-question when you navigate and to the new screen when the phase changes, semantic
-landmarks and headings, live progress exposed via `role="progressbar"`, and correct /
-incorrect never signalled by colour alone. Light and dark themes both follow the OS
-setting, and the layout works from ~320px up.
+**Light and dark themes.** A soft, warm "paper" light theme and a quiet warm-charcoal "ink"
+dark theme, built from one set of design tokens. The app follows your operating-system setting
+until you choose Light, Dark, or Match system in the header. An explicit choice is remembered
+on this device only (`localStorage`, never sent anywhere) and applied before first paint, so
+there is no flash of the wrong theme.
+
+Accessibility is built in rather than bolted on: answer choices are real radio buttons inside
+a labelled `fieldset` (arrow keys work, and each whole card is the tap target), a skip link,
+visible focus rings, focus moved to the question when you navigate and to the new screen when
+the phase changes, semantic landmarks and headings, progress exposed via `role="progressbar"`,
+WCAG AA contrast in both themes, forced-colours (High Contrast) support, and outcomes never
+signalled by colour alone. Motion is brief and switches off under `prefers-reduced-motion`.
+The layout is designed for phones first and works from ~320px up.
 
 ---
 
@@ -297,7 +304,7 @@ file. Review numbering reflects the order you actually saw.
 
 **Take again (reshuffle)** builds a brand new attempt from the same untouched source, with a
 new order, new choice positions, and new ids — which also means a stale selection from the
-previous attempt can never be scored against the new one. **Upload new quiz** clears
+previous attempt can never be scored against the new one. **New quiz** clears
 everything.
 
 ---
@@ -313,8 +320,9 @@ This is a property of the architecture, not a policy promise:
 - The only thing that ever reads your file is `File.text()` in the browser
   ([`src/components/UploadScreen.tsx`](src/components/UploadScreen.tsx)). Parsing, validation,
   shuffling, and grading are all client-side pure functions.
-- Nothing is persisted: no account, no database, no cookies, no `localStorage`, no analytics.
-  Closing the tab ends the session and the quiz is gone.
+- Nothing about your quiz is persisted: no account, no database, no cookies, no analytics,
+  and no quiz content in `localStorage`. Closing the tab ends the session and the quiz is
+  gone. The only thing kept on the device is your light/dark theme choice, if you make one.
 - The single network request the app makes on its own is fetching `/sample-quiz.json` — its
   own static sample file — when you click *Try the sample quiz*.
 - The browser enforces this as well: the Content-Security-Policy's `connect-src 'self'`
@@ -337,6 +345,7 @@ This runs `tsc --noEmit` and then `vite build`, producing `dist/`:
 dist/
 ├─ _headers            # security headers, parsed by Cloudflare (not served)
 ├─ index.html
+├─ theme-init.js       # applies a saved light/dark choice before first paint
 ├─ favicon.svg
 ├─ sample-quiz.json
 ├─ quiz-template.json
@@ -414,7 +423,7 @@ JavaScript bundle, its own stylesheet, its own favicon, and same-origin `fetch()
 quiz). **There is no `'unsafe-inline'`, no `'unsafe-eval'`, and no wildcard.** None are
 needed:
 
-- The built `index.html` contains no inline script or style.
+- The built `index.html` contains no inline script or style. The one script that has to run before first paint (applying a saved light/dark choice) is the same-origin file `public/theme-init.js` for exactly this reason.
 - React's `style={{...}}` props are applied through the CSSOM (`element.style`), which CSP
   does not restrict.
 - Uploaded files are read with `File.text()`, and the template and sample downloads are
@@ -513,6 +522,7 @@ quiz-on-demand/
 ├─ tsconfig.json
 ├─ public/
 │  ├─ _headers                   # Production security headers (Cloudflare)
+│  ├─ theme-init.js              # Applies a saved theme before first paint
 │  ├─ sample-quiz.json           # 20-question sample quiz
 │  ├─ quiz-template.json         # Fill-in template
 │  └─ favicon.svg
@@ -526,9 +536,13 @@ quiz-on-demand/
    │  ├─ shuffle.ts              # Fisher–Yates
    │  ├─ choices.ts              # Choice-count range, labels, quiz-shape summary
    │  ├─ attempt.ts              # Attempt building, grading, scoring
+   │  ├─ theme.ts                # Theme preference: read, store, apply
+   │  ├─ useThemePreference.ts   # React hook for the theme toggle
+   │  ├─ display.ts              # Readable quiz titles from file names
    │  ├─ validation.test.ts
    │  ├─ shuffle.test.ts
    │  ├─ choices.test.ts
+   │  ├─ display.test.ts
    │  └─ attempt.test.ts
    ├─ components/
    │  ├─ UploadScreen.tsx        # Drop zone, file picker, validation results
@@ -536,11 +550,16 @@ quiz-on-demand/
    │  ├─ QuizScreen.tsx          # Question, choices, navigation, navigator
    │  ├─ ConfirmSubmitDialog.tsx # Unanswered warning
    │  ├─ ResultsScreen.tsx       # Score, stats, review list, restart
+   │  ├─ SiteHeader.tsx          # Wordmark, guide link, theme control
+   │  ├─ ThemeToggle.tsx         # Light / Match system / Dark
+   │  ├─ Icons.tsx               # Inline SVG icons and the logo mark
    │  └─ PrivacyNote.tsx
    └─ test/
       ├─ setup.ts
       ├─ app.test.tsx            # Full user-journey tests
-      └─ fixtures.test.ts        # Shipped JSON files must validate
+      ├─ fixtures.test.ts        # Shipped JSON files must validate
+      ├─ security-headers.test.ts # CSP and header guard
+      └─ theme.test.tsx          # Theme, pre-paint script, token parity
 ```
 
 ---
@@ -551,7 +570,7 @@ quiz-on-demand/
 npm test
 ```
 
-168 tests across 6 files, covering:
+232 tests across 9 files, covering:
 
 - **Validation** — valid files, malformed JSON, a non-array root, an empty quiz, missing
   fields, wrong types, blank values, the answer duplicated among distractors, duplicate
@@ -587,7 +606,15 @@ npm test
   quiz giving each question its own count, scoring and reviewing a mixed quiz, reshuffling
   one, the upload screen reporting a uniform count and a range, out-of-range questions
   rejected by question number, a two-distractor question now accepted where the old
-  exactly-three rule refused it, and the on-page terminology.
+  exactly-three rule refused it, and the on-page terminology. For the redesign: the landing screen's reading order, returning from *Ready to begin* to the drop area, answer choices styled identically before submission (so the answer cannot be spotted), and *Review answers* moving focus to the review.
+- **Theme** (`src/test/theme.test.tsx`) — follows the OS until you choose; Light, Dark, and
+  Match system switch and are remembered locally; a stored choice is restored on the next
+  visit; blocked storage never breaks the toggle; nothing is sent over the network; the
+  pre-paint `theme-init.js` shares the storage key, applies a stored choice, ignores junk,
+  never throws, and is loaded as a blocking `<head>` script; the explicit-dark and OS-dark
+  token blocks are identical and every dark token has a light counterpart; and the stylesheet
+  uses no `data:` URIs the CSP would block.
+- **Display helpers** (`src/lib/display.test.ts`) — readable quiz titles from file names.
 - **Security headers** (`src/test/security-headers.test.ts`) — `public/_headers` is a single
   catch-all rule within Cloudflare's limits; every required header has its intended value;
   the CSP starts from `default-src 'none'`, allows only `'self'` for scripts, styles, images

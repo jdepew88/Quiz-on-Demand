@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { QuizScreen } from "./components/QuizScreen";
 import { ResultsScreen } from "./components/ResultsScreen";
+import { SiteHeader } from "./components/SiteHeader";
 import { UploadScreen } from "./components/UploadScreen";
 import { buildAttempt, gradeAttempt } from "./lib/attempt";
 import type { QuizAttempt, QuizResult, Selections, SourceQuestion } from "./lib/types";
@@ -9,8 +10,10 @@ import type { QuizAttempt, QuizResult, Selections, SourceQuestion } from "./lib/
  * Session state.
  *
  * `source` is the uploaded file's questions and is never mutated — every attempt is built
- * from it. Nothing here is persisted: no localStorage, no cookies, no network. Closing the
- * tab ends the session, which is exactly the privacy behaviour the app promises.
+ * from it. Quiz content is never persisted: no localStorage, no cookies, no network. Closing
+ * the tab ends the session, which is exactly the privacy behaviour the app promises. (The one
+ * thing kept on the device is the light/dark theme choice — see lib/theme.ts — which says
+ * nothing about any quiz.)
  */
 interface SessionState {
   source: SourceQuestion[];
@@ -63,7 +66,7 @@ export function App() {
     );
   }, []);
 
-  /** Uploading a new quiz clears every trace of the previous one. */
+  /** Starting a new quiz clears every trace of the previous one. */
   const resetToUpload = useCallback(() => setSession(null), []);
 
   const phase = session === null ? "upload" : session.result ? "results" : "quiz";
@@ -84,7 +87,9 @@ export function App() {
       return;
     }
 
-    mainRef.current?.focus();
+    // preventScroll: focusing <main> would otherwise scroll it to the top of the viewport,
+    // pushing the site header (and its theme control) out of sight on every new screen.
+    mainRef.current?.focus({ preventScroll: true });
   }, [phase, session?.attempt.attemptNumber]);
 
   return (
@@ -93,33 +98,19 @@ export function App() {
         Skip to main content
       </a>
 
-      <header className="site-header">
-        <div className="shell site-header__inner">
-          <span className="brand">
-            <span className="brand__mark" aria-hidden="true">
-              ?
-            </span>
-            Quiz on Demand
-          </span>
-          <span className="small muted">Bring your own questions. Nothing is uploaded.</span>
-        </div>
-      </header>
+      <SiteHeader showGuideLink={phase === "upload"} />
 
       <main className="site-main" id="main" ref={mainRef} tabIndex={-1}>
         {session === null ? (
-          <div className="shell">
-            <UploadScreen onStart={startQuiz} />
-          </div>
+          <UploadScreen onStart={startQuiz} />
         ) : session.result ? (
-          <div className="shell">
-            <ResultsScreen
-              result={session.result}
-              sourceName={session.sourceName}
-              attemptNumber={session.attempt.attemptNumber}
-              onRetake={retake}
-              onNewQuiz={resetToUpload}
-            />
-          </div>
+          <ResultsScreen
+            result={session.result}
+            sourceName={session.sourceName}
+            attemptNumber={session.attempt.attemptNumber}
+            onRetake={retake}
+            onNewQuiz={resetToUpload}
+          />
         ) : (
           <QuizScreen
             /* Keyed on the attempt so a reshuffle mounts a genuinely fresh quiz screen —
@@ -136,9 +127,9 @@ export function App() {
       </main>
 
       <footer className="site-footer">
-        <div className="shell site-footer__inner">
-          <span>Quiz on Demand — upload a JSON quiz, take it, review it.</span>
-          <span>Runs entirely in your browser.</span>
+        <div className="container site-footer__inner">
+          <span>Quiz on Demand</span>
+          <span>Runs entirely in your browser. Your quiz is never uploaded.</span>
         </div>
       </footer>
     </div>

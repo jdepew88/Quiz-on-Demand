@@ -56,7 +56,7 @@ async function startQuiz(data: unknown = QUIZ): Promise<User> {
 
 /** The question currently on screen, read from the fieldset's legend. */
 function currentQuestionText(): string {
-  return screen.getByRole("group").querySelector("legend")?.textContent ?? "";
+  return questionGroup().querySelector("legend")?.textContent ?? "";
 }
 
 function correctRadio(): HTMLInputElement {
@@ -92,6 +92,16 @@ async function openSubmitDialog(user: User) {
   return screen.getByRole("dialog");
 }
 
+/** The question's fieldset. Scoped to <main>: the header's theme control is a group too. */
+function questionGroup(): HTMLElement {
+  return within(screen.getByRole("main")).getByRole("group");
+}
+
+/** Each validation problem as one line of text, e.g. "Question 2: <message>". */
+function issueTexts(): string[] {
+  return Array.from(document.querySelectorAll(".issues__list li"), (item) => item.textContent ?? "");
+}
+
 describe("upload screen", () => {
   it("explains the schema and offers the template and sample downloads", () => {
     render(<App />);
@@ -119,36 +129,37 @@ describe("upload screen", () => {
   it("offers a file picker and a drop target", () => {
     render(<App />);
     expect(screen.getByLabelText(/choose a json file/i)).toBeInTheDocument();
-    expect(screen.getByText(/drag and drop your \.json quiz file here/i)).toBeInTheDocument();
+    expect(screen.getByText(/drop your quiz file here/i)).toBeInTheDocument();
   });
 
   it("reports the valid question count and offers to start", async () => {
     await upload(quizFile(QUIZ));
 
-    expect(await screen.findByText(/3 valid questions detected/i)).toBeInTheDocument();
-    expect(screen.getByText(/my-quiz\.json looks good/i)).toBeInTheDocument();
+    expect(await screen.findByText("Ready to begin")).toBeInTheDocument();
+    expect(screen.getByText("3 questions")).toBeInTheDocument();
+    expect(screen.getByText("my-quiz.json")).toBeInTheDocument();
+    // A readable title is derived from the file name, since the format has no title field.
+    expect(screen.getByRole("heading", { name: "My Quiz" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /start quiz/i })).toBeEnabled();
   });
 
   it("singularises a one-question quiz", async () => {
     await upload(quizFile([QUIZ[0]]));
-    expect(await screen.findByText(/1 valid question detected/i)).toBeInTheDocument();
+    expect(await screen.findByText("1 question")).toBeInTheDocument();
   });
 
   it("refuses a malformed file and names the offending question", async () => {
     await upload(quizFile([QUIZ[0], { question: "Broken?", answer: "a", distractors: ["b"] }]));
 
     expect(await screen.findByText(/could not be used/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/Question 2: Only 1 distractor supplied\. At least 2 distractors/i),
-    ).toBeInTheDocument();
+    expect(issueTexts()).toContainEqual(expect.stringMatching(/^Question 2: Only 1 distractor supplied\. At least 2 distractors/));
     expect(screen.queryByRole("button", { name: /start quiz/i })).not.toBeInTheDocument();
   });
 
   it("accepts a two-distractor question that the old exactly-three rule rejected", async () => {
     await upload(quizFile([QUIZ[0], { question: "Fine?", answer: "a", distractors: ["b", "c"] }]));
 
-    expect(await screen.findByText(/2 valid questions detected/i)).toBeInTheDocument();
+    expect(await screen.findByText("2 questions")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /start quiz/i })).toBeEnabled();
   });
 
@@ -175,7 +186,7 @@ describe("upload screen", () => {
 
     await user.upload(screen.getByLabelText(/choose a json file/i), quizFile(QUIZ, "good.json"));
 
-    expect(await screen.findByText(/good\.json looks good/i)).toBeInTheDocument();
+    expect(await screen.findByText("good.json")).toBeInTheDocument();
     expect(screen.queryByText(/could not be used/i)).not.toBeInTheDocument();
   });
 });
@@ -290,7 +301,7 @@ describe("submission confirmation", () => {
     await user.click(screen.getByRole("button", { name: /submit anyway/i }));
 
     expect(screen.getByRole("heading", { name: /your score/i })).toBeInTheDocument();
-    expect(screen.getByText("1 / 3")).toBeInTheDocument();
+    expect(screen.getByText("1 out of 3 correct")).toBeInTheDocument();
   });
 
   it("closes on Escape without submitting", async () => {
@@ -332,15 +343,15 @@ describe("results and review", () => {
   it("reports raw score, percentage, and the correct/incorrect/unanswered split", async () => {
     await completeAllCorrect();
 
-    expect(screen.getByText("3 / 3")).toBeInTheDocument();
+    expect(screen.getByText("3 out of 3 correct")).toBeInTheDocument();
     expect(screen.getByText("100%")).toBeInTheDocument();
 
-    const stat = (label: string) =>
-      screen.getByText(label, { selector: ".stat__label" }).previousElementSibling;
-    expect(stat("Correct")).toHaveTextContent("3");
-    expect(stat("Incorrect")).toHaveTextContent("0");
-    expect(stat("Unanswered")).toHaveTextContent("0");
-    expect(stat("Questions")).toHaveTextContent("3");
+    // Each tally is a <dt>/<dd> pair: the label, then its count. The total is covered by
+    // "3 out of 3 correct" above.
+    const tally = (label: string) => screen.getByText(label, { selector: "dt" }).nextElementSibling;
+    expect(tally("Correct")).toHaveTextContent("3");
+    expect(tally("Incorrect")).toHaveTextContent("0");
+    expect(tally("Unanswered")).toHaveTextContent("0");
   });
 
   it("reviews every question with the user's answer and the correct answer", async () => {
@@ -351,7 +362,7 @@ describe("results and review", () => {
     await openSubmitDialog(user);
     await user.click(screen.getByRole("button", { name: /submit anyway/i }));
 
-    expect(screen.getByText("1 / 3")).toBeInTheDocument();
+    expect(screen.getByText("1 out of 3 correct")).toBeInTheDocument();
     expect(reviewItems()).toHaveLength(3);
     expect(reviewItems("correct")).toHaveLength(1);
     expect(reviewItems("incorrect")).toHaveLength(1);
@@ -408,7 +419,7 @@ describe("restart", () => {
 
   it("reshuffles into a fresh attempt with no answers carried over", async () => {
     const user = await submitEmpty();
-    expect(screen.getByText("0 / 3")).toBeInTheDocument();
+    expect(screen.getByText("0 out of 3 correct")).toBeInTheDocument();
     expect(screen.getByText(/attempt 1/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /take again \(reshuffle\)/i }));
@@ -422,19 +433,19 @@ describe("restart", () => {
     // Same source file, so the new attempt still holds every question.
     await openSubmitDialog(user);
     await user.click(screen.getByRole("button", { name: /submit anyway/i }));
-    expect(screen.getByText("0 / 3")).toBeInTheDocument();
+    expect(screen.getByText("0 out of 3 correct")).toBeInTheDocument();
     expect(screen.getByText(/attempt 2/i)).toBeInTheDocument();
     expect(reviewItems()).toHaveLength(3);
   });
 
   it("returns to upload and clears the previous quiz", async () => {
     const user = await submitEmpty();
-    await user.click(screen.getByRole("button", { name: /upload new quiz/i }));
+    await user.click(screen.getByRole("button", { name: /^new quiz$/i }));
 
-    expect(screen.getByRole("heading", { name: /take a quiz on demand/i })).toBeInTheDocument();
-    expect(screen.queryByText(/my-quiz\.json looks good/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /any quiz\. any subject\./i })).toBeInTheDocument();
+    expect(screen.queryByText("my-quiz.json")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /start quiz/i })).not.toBeInTheDocument();
-    expect(screen.queryByText("0 / 3")).not.toBeInTheDocument();
+    expect(screen.queryByText("0 out of 3 correct")).not.toBeInTheDocument();
     expect(reviewItems()).toHaveLength(0);
   });
 
@@ -442,9 +453,9 @@ describe("restart", () => {
     const user = await startQuiz();
     await user.click(correctRadio());
 
-    await user.click(screen.getByRole("button", { name: /upload new quiz/i }));
+    await user.click(screen.getByRole("button", { name: /^new quiz$/i }));
 
-    expect(screen.getByRole("heading", { name: /take a quiz on demand/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /any quiz\. any subject\./i })).toBeInTheDocument();
     expect(screen.queryByText("Question 1 of 3")).not.toBeInTheDocument();
   });
 });
@@ -472,7 +483,7 @@ describe("accessibility scaffolding", () => {
 
   it("groups every choice under the question text", async () => {
     await startQuiz();
-    const group = screen.getByRole("group");
+    const group = questionGroup();
     expect(group).toHaveAccessibleName(currentQuestionText());
     expect(within(group).getAllByRole("radio")).toHaveLength(4);
   });
@@ -488,7 +499,7 @@ describe("accessibility scaffolding", () => {
   it("moves focus to the question when navigating", async () => {
     const user = await startQuiz();
     await user.click(screen.getByRole("button", { name: /next/i }));
-    expect(screen.getByRole("group").querySelector("legend")).toHaveFocus();
+    expect(questionGroup().querySelector("legend")).toHaveFocus();
   });
 
   it("moves focus into the new screen instead of dropping it on submit", async () => {
@@ -531,10 +542,10 @@ describe("variable distractor counts", () => {
   }
 
   it.each([
-    [2, 3, ["A.", "B.", "C."]],
-    [3, 4, ["A.", "B.", "C.", "D."]],
-    [4, 5, ["A.", "B.", "C.", "D.", "E."]],
-    [5, 6, ["A.", "B.", "C.", "D.", "E.", "F."]],
+    [2, 3, ["A", "B", "C"]],
+    [3, 4, ["A", "B", "C", "D"]],
+    [4, 5, ["A", "B", "C", "D", "E"]],
+    [5, 6, ["A", "B", "C", "D", "E", "F"]],
   ])(
     "renders %i distractors as %i choices labelled through the end of the list",
     async (count, expectedChoices, expectedLetters) => {
@@ -588,7 +599,7 @@ describe("variable distractor counts", () => {
     const dialog = await openSubmitDialog(user);
     await user.click(within(dialog).getByRole("button", { name: /submit quiz/i }));
 
-    expect(screen.getByText("3 / 3")).toBeInTheDocument();
+    expect(screen.getByText("3 out of 3 correct")).toBeInTheDocument();
     expect(screen.getByText("100%")).toBeInTheDocument();
     expect(reviewItems("correct")).toHaveLength(3);
 
@@ -607,7 +618,7 @@ describe("variable distractor counts", () => {
 
     await openSubmitDialog(user);
     await user.click(screen.getByRole("button", { name: /submit anyway/i }));
-    expect(screen.getByText("0 / 2")).toBeInTheDocument();
+    expect(screen.getByText("0 out of 2 correct")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /take again \(reshuffle\)/i }));
 
@@ -622,7 +633,7 @@ describe("variable distractor counts", () => {
 
     const dialog = await openSubmitDialog(user);
     await user.click(within(dialog).getByRole("button", { name: /submit quiz/i }));
-    expect(screen.getByText("2 / 2")).toBeInTheDocument();
+    expect(screen.getByText("2 out of 2 correct")).toBeInTheDocument();
     expect(screen.getByText(/attempt 2/i)).toBeInTheDocument();
   });
 
@@ -647,22 +658,16 @@ describe("variable distractor counts", () => {
   it("rejects a question with too few distractors, naming the question", async () => {
     await upload(quizFile([question(3, "ok"), question(1, "thin")]));
 
-    expect(
-      await screen.findByText(
-        /Question 2: Only 1 distractor supplied\. At least 2 distractors are required\./i,
-      ),
-    ).toBeInTheDocument();
+    await screen.findByText(/could not be used/i);
+    expect(issueTexts()).toContainEqual(expect.stringMatching(/^Question 2: Only 1 distractor supplied\. At least 2 distractors are required\./));
     expect(screen.queryByRole("button", { name: /start quiz/i })).not.toBeInTheDocument();
   });
 
   it("rejects a question with too many distractors, naming the question", async () => {
     await upload(quizFile([question(3, "ok"), question(3, "ok2"), question(6, "fat")]));
 
-    expect(
-      await screen.findByText(
-        /Question 3: 6 distractors supplied\. The maximum supported number is 5\./i,
-      ),
-    ).toBeInTheDocument();
+    await screen.findByText(/could not be used/i);
+    expect(issueTexts()).toContainEqual(expect.stringMatching(/^Question 3: 6 distractors supplied\. The maximum supported number is 5\./));
     expect(screen.queryByRole("button", { name: /start quiz/i })).not.toBeInTheDocument();
   });
 
@@ -673,9 +678,9 @@ describe("variable distractor counts", () => {
     expect(
       screen.getByText(/Total choices = 1 correct answer \+ distractors\./i),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/3 distractors \+ 1 correct answer = 4 total choices is the recommended/i),
-    ).toBeInTheDocument();
+    const formula = document.querySelector(".formula")?.textContent ?? "";
+    expect(formula).toMatch(/3 distractors \+ 1 correct answer = 4 total choices/);
+    expect(formula).toMatch(/recommended/i);
     // The shorter 2-distractor example proves the count is not fixed at three.
     const codeBlocks = Array.from(document.querySelectorAll("pre.code")).map(
       (node) => node.textContent ?? "",
@@ -686,5 +691,46 @@ describe("variable distractor counts", () => {
         (text) => text.includes('"3"') && text.includes('"5"') && !text.includes('"6"'),
       ),
     ).toBe(true);
+  });
+});
+
+describe("redesigned screens", () => {
+  it("leads with what the app does, then the upload control, then the format guide", () => {
+    render(<App />);
+    const heading = screen.getByRole("heading", { level: 1 });
+    const upload = screen.getByLabelText(/choose a json file/i);
+    const guide = screen.getByRole("heading", { name: /quiz file format/i });
+
+    expect(heading).toHaveAccessibleName(/any quiz\. any subject\./i);
+    // Document order is reading order: what it does, then upload, then the guide.
+    expect(heading.compareDocumentPosition(upload) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(upload.compareDocumentPosition(guide) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("returns to the drop area when choosing a different file", async () => {
+    const user = await upload(quizFile(QUIZ));
+    await user.click(await screen.findByRole("button", { name: /choose a different file/i }));
+
+    expect(screen.getByLabelText(/choose a json file/i)).toBeInTheDocument();
+    expect(screen.queryByText("Ready to begin")).not.toBeInTheDocument();
+  });
+
+  it("styles every choice identically before submission, so the answer cannot be spotted", async () => {
+    await startQuiz();
+
+    const classes = Array.from(document.querySelectorAll(".choice"), (choice) => choice.className);
+    expect(classes).toHaveLength(4);
+    expect(new Set(classes).size).toBe(1);
+    expect(screen.queryByText("Correct answer")).not.toBeInTheDocument();
+  });
+
+  it("moves focus to the review when Review answers is pressed", async () => {
+    const user = await startQuiz();
+    await openSubmitDialog(user);
+    await user.click(screen.getByRole("button", { name: /submit anyway/i }));
+
+    await user.click(screen.getByRole("button", { name: /review answers/i }));
+
+    expect(screen.getByRole("heading", { name: "Review" })).toHaveFocus();
   });
 });

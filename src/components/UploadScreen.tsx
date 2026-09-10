@@ -1,8 +1,18 @@
-import { useCallback, useId, useMemo, useRef, useState } from "react";
-import { FormatGuide, SAMPLE_FILE } from "./FormatGuide";
+import {
+  useCallback,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type MouseEvent,
+} from "react";
+import { FormatGuide, SAMPLE_FILE, TEMPLATE_FILE } from "./FormatGuide";
+import { IconAlert, IconArrowRight, IconCheck, IconDownload, IconFile, IconUpload } from "./Icons";
 import { PrivacyNote } from "./PrivacyNote";
-import { formatIssue, parseQuizFile, type ValidationResult } from "../lib/validation";
 import { describeChoiceShape, summarizeChoiceShape } from "../lib/choices";
+import { quizTitleFromFileName } from "../lib/display";
+import { parseQuizFile, type ValidationResult } from "../lib/validation";
 import type { SourceQuestion } from "../lib/types";
 
 /** Beyond this the list stops being a to-do list and starts being a wall. */
@@ -13,6 +23,10 @@ interface LoadedFile {
   result: ValidationResult;
 }
 
+/**
+ * The landing screen. Hierarchy, top to bottom: what this does, the upload control, the
+ * sample, and only then the format guide.
+ */
 export function UploadScreen({
   onStart,
 }: {
@@ -23,6 +37,7 @@ export function UploadScreen({
   const [readError, setReadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const inputId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
   const statusRef = useRef<HTMLDivElement>(null);
   // Nested dragenter/dragleave events fire for child elements too; counting them keeps the
   // highlight from flickering as the pointer crosses the inner text.
@@ -31,7 +46,7 @@ export function UploadScreen({
   const acceptText = useCallback((name: string, text: string) => {
     setReadError(null);
     setLoaded({ name, result: parseQuizFile(text) });
-    // Move the reader to the outcome — the panel appears below the fold on small screens.
+    // Move the reader to the outcome — it replaces the drop area, or appears below it.
     window.requestAnimationFrame(() => statusRef.current?.focus());
   }, []);
 
@@ -64,7 +79,7 @@ export function UploadScreen({
     }
   }, [acceptText]);
 
-  function handleDrop(event: React.DragEvent<HTMLDivElement>) {
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     dragDepth.current = 0;
     setDragging(false);
@@ -72,151 +87,211 @@ export function UploadScreen({
     if (file) void readFile(file);
   }
 
-  const questionCount = loaded?.result.ok ? loaded.result.questions.length : 0;
+  function handleZoneClick(event: MouseEvent<HTMLDivElement>) {
+    // The labelled button opens the picker by itself; this only extends the target to the
+    // rest of the card, so a touch user can tap anywhere on it. Keyboard users have the
+    // button, so this is an enhancement rather than the only way in.
+    if ((event.target as HTMLElement).closest("label, input, button, a")) return;
+    if (!busy) inputRef.current?.click();
+  }
+
+  const questions = loaded?.result.ok ? loaded.result.questions : null;
+  const issues = loaded && !loaded.result.ok ? loaded.result.issues : null;
 
   // Report the answer-choice structure back, so the author can see at a glance whether the
   // file is shaped the way they meant — a stray fourth distractor in one question shows up
   // here as a range rather than passing unnoticed.
-  const shape = useMemo(
-    () => (loaded?.result.ok ? summarizeChoiceShape(loaded.result.questions) : null),
-    [loaded],
-  );
-  const shapeLabels = shape ? describeChoiceShape(shape) : null;
+  const shapeLabels = useMemo(() => {
+    const shape = questions ? summarizeChoiceShape(questions) : null;
+    return shape ? describeChoiceShape(shape) : null;
+  }, [questions]);
 
   return (
-    <div className="stack">
-      <div className="hero">
-        <h1>Take a quiz on demand</h1>
-        <p>
-          Upload a JSON quiz file, get a freshly shuffled set of questions, and see exactly what
-          you got right and wrong. Works for any subject — no account, no setup.
+    <div className="container landing">
+      <section className="hero" aria-labelledby="hero-title">
+        <h1 id="hero-title" className="hero__title">
+          Any quiz. <span className="hero__mark">Any subject.</span>
+        </h1>
+        <p className="hero__lede">
+          Upload a quiz file, take it in a fresh random order, then review exactly what you
+          missed.
         </p>
-      </div>
+      </section>
 
-      <div
-        className={`dropzone${dragging ? " dropzone--active" : ""}`}
-        onDragEnter={(event) => {
-          event.preventDefault();
-          dragDepth.current += 1;
-          setDragging(true);
-        }}
-        onDragOver={(event) => event.preventDefault()}
-        onDragLeave={(event) => {
-          event.preventDefault();
-          dragDepth.current = Math.max(0, dragDepth.current - 1);
-          if (dragDepth.current === 0) setDragging(false);
-        }}
-        onDrop={handleDrop}
-      >
-        <span className="dropzone__icon" aria-hidden="true">
-          📄
-        </span>
-        <p style={{ fontWeight: 600, fontSize: "1.05rem" }}>
-          {dragging ? "Drop your quiz file to load it" : "Drag and drop your .json quiz file here"}
-        </p>
-        <p className="dropzone__hint">or</p>
-
-        <div className="file-field">
-          <label className="file-label" htmlFor={inputId}>
-            Choose a JSON file
-          </label>
-          <input
-            id={inputId}
-            className="file-input"
-            type="file"
-            accept=".json,application/json"
-            disabled={busy}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) void readFile(file);
-              // Reset so re-choosing the same file after an edit still fires onChange.
-              event.target.value = "";
+      <section className="upload" aria-label="Load a quiz">
+        {!questions && (
+          <div
+            className={[
+              "dropzone",
+              dragging ? "dropzone--active" : "",
+              busy ? "dropzone--busy" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            onClick={handleZoneClick}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              dragDepth.current += 1;
+              setDragging(true);
             }}
-          />
-        </div>
+            onDragOver={(event) => event.preventDefault()}
+            onDragLeave={(event) => {
+              event.preventDefault();
+              dragDepth.current = Math.max(0, dragDepth.current - 1);
+              if (dragDepth.current === 0) setDragging(false);
+            }}
+            onDrop={handleDrop}
+          >
+            <span className="dropzone__icon" aria-hidden="true">
+              <IconUpload size={26} />
+            </span>
+            <p className="dropzone__title">
+              <span className="dropzone__title-pointer">
+                {dragging ? "Release to load your quiz" : "Drop your quiz file here"}
+              </span>
+              <span className="dropzone__title-touch">Choose your quiz file</span>
+            </p>
+            <p className="dropzone__or">or</p>
 
-        <p className="dropzone__hint">{busy ? "Reading file…" : "Nothing leaves your browser."}</p>
-      </div>
+            <div className="file-field">
+              <label className="btn btn--primary btn--lg" htmlFor={inputId}>
+                Choose a JSON file
+              </label>
+              <input
+                id={inputId}
+                ref={inputRef}
+                className="file-input"
+                type="file"
+                accept=".json,application/json"
+                disabled={busy}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void readFile(file);
+                  // Reset so re-choosing the same file after an edit still fires onChange.
+                  event.target.value = "";
+                }}
+              />
+            </div>
 
-      {/* Focus is moved here after a file is read, which is what announces the outcome.
-          An aria-live region on the same node would duplicate the whole panel. */}
-      <div ref={statusRef} tabIndex={-1} className="stack--tight">
-        {readError && (
-          <div className="notice notice--error">
-            <strong>{readError}</strong>
+            <p className="dropzone__hint" aria-live="polite">
+              {busy ? "Reading file…" : "A .json file · read on this device, never uploaded"}
+            </p>
           </div>
         )}
 
-        {loaded?.result.ok && (
-          <section className="card stack--tight" style={{ display: "grid", gap: "0.9rem" }}>
-            <div className="notice notice--success">
-              <strong>{loaded.name} looks good.</strong>{" "}
-              {questionCount} valid question{questionCount === 1 ? "" : "s"} detected.
+        {/* Focus is moved here after a file is read, which is what announces the outcome.
+            An aria-live region on the same node would duplicate the whole panel. */}
+        <div ref={statusRef} tabIndex={-1} className="upload__status">
+          {readError && (
+            <div className="issues issues--compact">
+              <div className="issues__head">
+                <span className="issues__icon" aria-hidden="true">
+                  <IconAlert size={20} />
+                </span>
+                <p className="issues__title">{readError}</p>
+              </div>
             </div>
+          )}
 
-            {shapeLabels && (
-              <ul className="shape-summary">
-                <li>{shapeLabels.questions}</li>
-                <li>{shapeLabels.distractors}</li>
-                <li>{shapeLabels.choices}</li>
-              </ul>
-            )}
+          {questions && loaded && (
+            <section className="ready" aria-labelledby="ready-title">
+              <span className="ready__badge" aria-hidden="true">
+                <IconCheck size={24} className="ready__check" />
+              </span>
+              <div className="ready__body">
+                <p className="ready__eyebrow" id="ready-title">
+                  Ready to begin
+                </p>
+                <h2 className="ready__title">{quizTitleFromFileName(loaded.name)}</h2>
+                <p className="ready__file">
+                  <IconFile size={15} /> {loaded.name}
+                </p>
+                {shapeLabels && (
+                  <ul className="ready__meta" aria-label="Quiz summary">
+                    <li className="ready__meta-lead">{shapeLabels.questions}</li>
+                    <li>{shapeLabels.distractors}</li>
+                    <li>{shapeLabels.choices}</li>
+                  </ul>
+                )}
+                <p className="ready__note">
+                  Questions and answer choices are shuffled fresh every time you start.
+                </p>
+              </div>
+              <div className="ready__actions">
+                <button
+                  type="button"
+                  className="btn btn--primary btn--lg"
+                  onClick={() => onStart(questions, loaded.name)}
+                >
+                  Start quiz <IconArrowRight size={18} />
+                </button>
+                <button type="button" className="btn btn--quiet" onClick={() => setLoaded(null)}>
+                  Choose a different file
+                </button>
+              </div>
+            </section>
+          )}
 
-            <p className="small muted">
-              Questions and answer choices are shuffled fresh each time you start.
-            </p>
-            <div className="btn-row">
-              <button
-                type="button"
-                className="btn btn--lg"
-                onClick={() => {
-                  if (loaded.result.ok) onStart(loaded.result.questions, loaded.name);
-                }}
-              >
-                Start quiz →
-              </button>
-              <button type="button" className="btn btn--secondary" onClick={() => setLoaded(null)}>
-                Choose a different file
-              </button>
-            </div>
-          </section>
+          {issues && loaded && (
+            <section className="issues" aria-labelledby="issues-heading">
+              <div className="issues__head">
+                <span className="issues__icon" aria-hidden="true">
+                  <IconAlert size={20} />
+                </span>
+                <div>
+                  <h2 id="issues-heading" className="issues__title">
+                    {loaded.name} could not be used
+                  </h2>
+                  <p className="issues__sub">
+                    {issues.length} problem{issues.length === 1 ? "" : "s"} found. Nothing was
+                    discarded — fix the file and upload it again.
+                  </p>
+                </div>
+              </div>
+
+              <ol className="issues__list">
+                {issues.slice(0, MAX_ISSUES_SHOWN).map((issue, index) => (
+                  <li key={`${issue.questionNumber ?? "file"}-${index}`}>
+                    <span className="issues__where">
+                      {issue.questionNumber === null ? "Whole file" : `Question ${issue.questionNumber}`}
+                    </span>
+                    <span className="visually-hidden">: </span>
+                    <span className="issues__message">{issue.message}</span>
+                  </li>
+                ))}
+              </ol>
+
+              {issues.length > MAX_ISSUES_SHOWN && (
+                <p className="issues__more">
+                  …and {issues.length - MAX_ISSUES_SHOWN} more problem
+                  {issues.length - MAX_ISSUES_SHOWN === 1 ? "" : "s"}. Fix these first, then
+                  upload again to see the rest.
+                </p>
+              )}
+            </section>
+          )}
+        </div>
+
+        {!questions && (
+          <div className="upload__secondary">
+            <button
+              type="button"
+              className="btn btn--secondary"
+              onClick={() => void loadSample()}
+              disabled={busy}
+            >
+              Try the sample quiz
+            </button>
+            <a className="text-link" href={TEMPLATE_FILE} download="quiz-template.json">
+              <IconDownload size={16} /> Download template JSON
+            </a>
+          </div>
         )}
 
-        {loaded && !loaded.result.ok && (
-          <section className="card" aria-labelledby="issues-heading">
-            <div className="notice notice--error">
-              <strong id="issues-heading">
-                {loaded.name} could not be used ({loaded.result.issues.length} problem
-                {loaded.result.issues.length === 1 ? "" : "s"} found).
-              </strong>
-              <p className="small" style={{ marginTop: "0.3rem" }}>
-                Nothing was discarded — fix the file and upload it again.
-              </p>
-            </div>
-            <ul className="issue-list">
-              {loaded.result.issues.slice(0, MAX_ISSUES_SHOWN).map((issue, index) => (
-                <li key={`${issue.questionNumber ?? "file"}-${index}`}>
-                  <span className="issue-list__num" aria-hidden="true">
-                    {issue.questionNumber === null ? "!" : issue.questionNumber}
-                  </span>
-                  <span>{formatIssue(issue)}</span>
-                </li>
-              ))}
-            </ul>
-            {loaded.result.issues.length > MAX_ISSUES_SHOWN && (
-              <p className="small muted" style={{ marginTop: "0.6rem" }}>
-                …and {loaded.result.issues.length - MAX_ISSUES_SHOWN} more problem
-                {loaded.result.issues.length - MAX_ISSUES_SHOWN === 1 ? "" : "s"}. Fix these first,
-                then upload again to see the rest.
-              </p>
-            )}
-          </section>
-        )}
-      </div>
+        <PrivacyNote />
+      </section>
 
-      <FormatGuide onLoadSample={() => void loadSample()} />
-
-      <PrivacyNote />
+      <FormatGuide />
     </div>
   );
 }

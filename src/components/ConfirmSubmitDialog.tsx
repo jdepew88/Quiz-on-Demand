@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { IconAlert } from "./Icons";
 
 /**
  * Submission confirmation.
@@ -65,7 +66,7 @@ export function ConfirmSubmitDialog({
 
   return (
     <div
-      className="overlay"
+      className="dialog-backdrop"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onCancel();
       }}
@@ -78,30 +79,38 @@ export function ConfirmSubmitDialog({
         aria-labelledby="confirm-title"
         aria-describedby="confirm-body"
       >
-        <h2 id="confirm-title">{hasUnanswered ? "Submit with unanswered questions?" : "Submit your quiz?"}</h2>
+        <h2 id="confirm-title" className="dialog__title">
+          {hasUnanswered ? "Submit with unanswered questions?" : "Submit your quiz?"}
+        </h2>
 
-        <div id="confirm-body" className={hasUnanswered ? "notice notice--warning" : "notice"}>
+        <div
+          id="confirm-body"
+          className={hasUnanswered ? "dialog__body dialog__body--warning" : "dialog__body"}
+        >
           {hasUnanswered ? (
             <>
-              <strong>
-                {unansweredCount} of {totalCount} question{totalCount === 1 ? "" : "s"}{" "}
-                {unansweredCount === 1 ? "is" : "are"} still unanswered.
-              </strong>{" "}
-              Unanswered questions are scored as incorrect.
+              <IconAlert size={18} className="dialog__icon" />
+              <p>
+                <strong>
+                  {unansweredCount} of {totalCount} question{totalCount === 1 ? "" : "s"}{" "}
+                  {unansweredCount === 1 ? "is" : "are"} still unanswered.
+                </strong>{" "}
+                Unanswered questions are scored as incorrect.
+              </p>
             </>
           ) : (
-            <>
+            <p>
               All {totalCount} question{totalCount === 1 ? "" : "s"} answered. You cannot change
               your answers after submitting.
-            </>
+            </p>
           )}
         </div>
 
         <div className="dialog__actions">
-          <button type="button" className="btn btn--secondary" ref={cancelRef} onClick={onCancel}>
+          <button type="button" className="btn btn--quiet" ref={cancelRef} onClick={onCancel}>
             {hasUnanswered ? "Return to quiz" : "Keep checking"}
           </button>
-          <button type="button" className="btn btn--success" onClick={onConfirm}>
+          <button type="button" className="btn btn--primary" onClick={onConfirm}>
             {hasUnanswered ? "Submit anyway" : "Submit quiz"}
           </button>
         </div>
