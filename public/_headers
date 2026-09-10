@@ -1,0 +1,35 @@
+# Production security headers for Quiz on Demand.
+#
+# Parsed by Cloudflare Workers Static Assets (and by `wrangler dev` locally). Vite copies
+# this file from public/ into dist/, the [assets] directory in wrangler.toml. It is not
+# itself served as an asset. There is no Worker script in this project, so every response
+# is a static asset and every response gets these headers.
+#
+# A single catch-all rule on purpose: when several rules match a path Cloudflare merges
+# them and comma-joins repeated headers, which would split the CSP into two policies.
+#
+# CSP, directive by directive (the app is one same-origin JS bundle + one stylesheet):
+#   default-src 'none'        deny everything not explicitly allowed below
+#   script-src 'self'         /assets/index-*.js only; no inline script, no eval
+#   style-src 'self'          /assets/index-*.css only. React style props are applied
+#                             through the CSSOM, which CSP does not govern, so no
+#                             'unsafe-inline' is needed
+#   img-src 'self'            /favicon.svg
+#   connect-src 'self'        fetch('/sample-quiz.json') and Vite's modulepreload polyfill
+#   base-uri 'none'           no <base> tag exists; forbid injecting one
+#   form-action 'none'        the app submits no forms; does not fall back to default-src
+#   frame-ancestors 'none'    the app may not be framed (clickjacking)
+# Uploaded quiz files are read with File.text(), which CSP does not restrict. The download
+# links are plain same-origin navigations, which CSP does not restrict either.
+#
+# Deliberately omitted (see README "Security headers"): Strict-Transport-Security,
+# Cross-Origin-Embedder-Policy, X-XSS-Protection, require-trusted-types-for,
+# report-uri / report-to.
+/*
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  Permissions-Policy: accelerometer=(), autoplay=(), browsing-topics=(), camera=(), clipboard-read=(), display-capture=(), encrypted-media=(), fullscreen=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), usb=(), xr-spatial-tracking=()
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin

@@ -317,6 +317,9 @@ This is a property of the architecture, not a policy promise:
   Closing the tab ends the session and the quiz is gone.
 - The single network request the app makes on its own is fetching `/sample-quiz.json` — its
   own static sample file — when you click *Try the sample quiz*.
+- The browser enforces this as well: the Content-Security-Policy's `connect-src 'self'`
+  (see [Security headers](#security-headers)) forbids the page from sending requests to any
+  other origin, so even a future bug could not post a quiz somewhere else.
 
 The statement above is shown in the UI on both the upload and results screens.
 
@@ -332,6 +335,7 @@ This runs `tsc --noEmit` and then `vite build`, producing `dist/`:
 
 ```
 dist/
+├─ _headers            # security headers, parsed by Cloudflare (not served)
 ├─ index.html
 ├─ favicon.svg
 ├─ sample-quiz.json
@@ -379,6 +383,83 @@ To verify the configuration without deploying anything:
 npm run build
 npx wrangler deploy --dry-run
 ```
+
+### Security headers
+
+Production security headers live in [`public/_headers`](public/_headers). Vite copies it into
+`dist/`, and Cloudflare Workers Static Assets parses it and applies it to responses; the
+file itself is never served. There is no Worker script in this project, so every response
+is a static asset and every response gets the headers, including the `index.html` served
+for SPA deep links (verified with `wrangler dev`).
+
+| Header | Value | Why |
+| --- | --- | --- |
+| `Content-Security-Policy` | see below | Restricts what the page may load, run, connect to, and who may frame it. |
+| `X-Content-Type-Options` | `nosniff` | Stops browsers guessing a script or stylesheet out of a mis-typed response. |
+| `X-Frame-Options` | `DENY` | Clickjacking protection for browsers that predate CSP `frame-ancestors`. |
+| `Referrer-Policy` | `no-referrer` | The app links nowhere that needs a referrer; send none. |
+| `Permissions-Policy` | every listed feature `=()` | Camera, microphone, geolocation, payment, USB, sensors, and similar are unused, so they are switched off for this page and anything it could embed. |
+| `Cross-Origin-Opener-Policy` | `same-origin` | Puts the app in its own browsing-context group, so a cross-origin window cannot keep a handle on it. |
+| `Cross-Origin-Resource-Policy` | `same-origin` | Other sites cannot pull the app's scripts, styles, or JSON into their pages. Direct links and downloads still work. |
+
+The Content-Security-Policy:
+
+```text
+default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self';
+base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+```
+
+It starts from `default-src 'none'` and allows back only what the built app uses: its own
+JavaScript bundle, its own stylesheet, its own favicon, and same-origin `fetch()` (the sample
+quiz). **There is no `'unsafe-inline'`, no `'unsafe-eval'`, and no wildcard.** None are
+needed:
+
+- The built `index.html` contains no inline script or style.
+- React's `style={{...}}` props are applied through the CSSOM (`element.style`), which CSP
+  does not restrict.
+- Uploaded files are read with `File.text()`, and the template and sample downloads are
+  plain same-origin links. CSP restricts neither.
+
+`src/test/security-headers.test.ts` fails if the policy is loosened with any of those
+keywords, or if an inline script or style attribute is added to `index.html` (the policy
+would block it in production).
+
+**Deliberately not set:**
+
+- **`Strict-Transport-Security`.** On `*.workers.dev` it would add nothing: the whole `.dev`
+  top-level domain is on the browser HSTS preload list, so browsers already refuse plain HTTP
+  there (hstspreload.org lists `workers.dev` as preloaded via `dev`). On a custom domain,
+  HSTS belongs in the Cloudflare zone (**SSL/TLS → Edge Certificates → HSTS**). Its
+  `max-age`, `includeSubDomains`, and `preload` settings bind every subdomain of that domain,
+  often for a year or more, and a header in this repo cannot know what else runs there.
+- **`Cross-Origin-Embedder-Policy`.** Only needed for cross-origin isolation
+  (`SharedArrayBuffer`, high-resolution timers), which the app does not use, and it would
+  block any cross-origin resource added later.
+- **`X-XSS-Protection`.** Obsolete: every current browser has removed the XSS auditor it
+  controlled, and the auditor could itself be abused. CSP is the replacement.
+- **`require-trusted-types-for 'script'`.** React DOM's bundle contains `innerHTML` sinks (for
+  `dangerouslySetInnerHTML`). The app reaches none of them today, but enforcing Trusted Types
+  without a policy would turn any future use into a hard runtime failure. Worth adopting
+  deliberately, starting with a report-only trial, rather than by default.
+- **`report-uri` / `report-to`.** There is nowhere to send reports. A static site would need a
+  Worker or a third-party collector to receive them, which cuts against the app's
+  nothing-leaves-the-browser design.
+- **`upgrade-insecure-requests`.** Every subresource is same-origin, so there is nothing to
+  upgrade.
+
+**Checking them locally.** `npm run dev` (Vite) does **not** apply `_headers`; only the Workers
+runtime does. To run under the production headers:
+
+```bash
+npm run build
+npm run cf:dev          # then, in another terminal:
+curl -I http://127.0.0.1:8787/
+```
+
+**If a Worker or API is added later:** `_headers` rules do not apply to responses generated by
+Worker code. Set headers on those responses in the Worker itself. JSON API responses need
+`X-Content-Type-Options: nosniff` and a suitable `Cross-Origin-Resource-Policy`, not the
+document CSP. Leave CORS closed unless a cross-origin caller genuinely needs it.
 
 ### Why `wrangler.toml`, and why Workers rather than Pages
 
@@ -431,6 +512,7 @@ quiz-on-demand/
 ├─ eslint.config.js
 ├─ tsconfig.json
 ├─ public/
+│  ├─ _headers                   # Production security headers (Cloudflare)
 │  ├─ sample-quiz.json           # 20-question sample quiz
 │  ├─ quiz-template.json         # Fill-in template
 │  └─ favicon.svg
@@ -506,6 +588,13 @@ npm test
   one, the upload screen reporting a uniform count and a range, out-of-range questions
   rejected by question number, a two-distractor question now accepted where the old
   exactly-three rule refused it, and the on-page terminology.
+- **Security headers** (`src/test/security-headers.test.ts`) — `public/_headers` is a single
+  catch-all rule within Cloudflare's limits; every required header has its intended value;
+  the CSP starts from `default-src 'none'`, allows only `'self'` for scripts, styles, images
+  and connections, denies framing, `<base>`, and form submission, and contains no
+  `'unsafe-inline'`, `'unsafe-eval'`, wildcard, or scheme source; Permissions-Policy denies
+  every listed feature; HSTS is absent by decision; and `index.html` has no inline script,
+  inline style, or inline event handler that the policy would block.
 - **Shipped fixtures** — `public/sample-quiz.json`, `public/quiz-template.json`, and the
   example printed on the upload page all validate and produce a playable, gradeable attempt
   whose per-question choice count matches the distractors supplied; the sample and template
