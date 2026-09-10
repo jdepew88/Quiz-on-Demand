@@ -1,0 +1,7 @@
+# Quiz on Demand — the whole site is public and may be crawled.
+#
+# This file has to exist: wrangler.toml uses single-page-application not-found handling, so
+# without it /robots.txt would fall back to index.html, which crawlers try (and fail) to read
+# as robots rules.
+User-agent: *
+Allow: /

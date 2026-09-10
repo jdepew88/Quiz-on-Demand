@@ -346,6 +346,7 @@ dist/
 ├─ _headers            # security headers, parsed by Cloudflare (not served)
 ├─ index.html
 ├─ theme-init.js       # applies a saved light/dark choice before first paint
+├─ robots.txt          # crawler rules (keeps /robots.txt from falling back to index.html)
 ├─ favicon.svg
 ├─ sample-quiz.json
 ├─ quiz-template.json
@@ -523,6 +524,7 @@ quiz-on-demand/
 ├─ public/
 │  ├─ _headers                   # Production security headers (Cloudflare)
 │  ├─ theme-init.js              # Applies a saved theme before first paint
+│  ├─ robots.txt                 # Crawler rules
 │  ├─ sample-quiz.json           # 20-question sample quiz
 │  ├─ quiz-template.json         # Fill-in template
 │  └─ favicon.svg
@@ -559,6 +561,7 @@ quiz-on-demand/
       ├─ app.test.tsx            # Full user-journey tests
       ├─ fixtures.test.ts        # Shipped JSON files must validate
       ├─ security-headers.test.ts # CSP and header guard
+      ├─ seo.test.ts             # robots.txt and index.html SEO basics
       └─ theme.test.tsx          # Theme, pre-paint script, token parity
 ```
 
@@ -570,7 +573,7 @@ quiz-on-demand/
 npm test
 ```
 
-232 tests across 9 files, covering:
+242 tests across 10 files, covering:
 
 - **Validation** — valid files, malformed JSON, a non-array root, an empty quiz, missing
   fields, wrong types, blank values, the answer duplicated among distractors, duplicate
@@ -615,6 +618,9 @@ npm test
   token blocks are identical and every dark token has a light counterpart; and the stylesheet
   uses no `data:` URIs the CSP would block.
 - **Display helpers** (`src/lib/display.test.ts`) — readable quiz titles from file names.
+- **SEO basics** (`src/test/seo.test.ts`) — `public/robots.txt` exists, is plain text with
+  only valid directives, and does not block crawling; `index.html` declares a language and
+  has a title, meta description, and mobile viewport, and is not marked `noindex`.
 - **Security headers** (`src/test/security-headers.test.ts`) — `public/_headers` is a single
   catch-all rule within Cloudflare's limits; every required header has its intended value;
   the CSP starts from `default-src 'none'`, allows only `'self'` for scripts, styles, images
