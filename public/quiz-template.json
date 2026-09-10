@@ -1,0 +1,13 @@
+[
+  {
+    "question": "Replace this with your question.",
+    "answer": "Correct answer",
+    "distractors": ["Incorrect answer 1", "Incorrect answer 2", "Incorrect answer 3"]
+  },
+  {
+    "question": "Add as many questions as you like. Each one needs exactly three distractors.",
+    "answer": "Correct answer",
+    "distractors": ["Incorrect answer 1", "Incorrect answer 2", "Incorrect answer 3"],
+    "explanation": "The explanation field is optional. When present it is shown on the review screen after you submit."
+  }
+]

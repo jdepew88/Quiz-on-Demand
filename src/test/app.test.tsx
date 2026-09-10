@@ -1,0 +1,498 @@
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it } from "vitest";
+import { App } from "../App";
+
+/**
+ * End-to-end behaviour of the actual screens: upload -> validate -> take -> submit ->
+ * review -> reshuffle -> reset. These cover the quiz *experience* requirements that the
+ * pure-function tests in `src/lib` cannot reach.
+ *
+ * Because the question order is randomized on purpose, nothing here may assume which
+ * question is on screen. Helpers read the visible question text and look its answer up,
+ * which is also a standing check that grading stays correct under randomization.
+ */
+
+const QUIZ = [
+  {
+    question: "What is the capital of France?",
+    answer: "Paris",
+    distractors: ["London", "Berlin", "Madrid"],
+  },
+  {
+    question: "What is 2 + 2?",
+    answer: "4",
+    distractors: ["3", "5", "6"],
+  },
+  {
+    question: "Which planet is closest to the Sun?",
+    answer: "Mercury",
+    distractors: ["Venus", "Mars", "Earth"],
+    explanation: "Mercury orbits nearest the Sun.",
+  },
+];
+
+/** Correct answer text keyed by question text, for clicking the right radio. */
+const ANSWERS = new Map(QUIZ.map((entry) => [entry.question, entry.answer]));
+
+type User = ReturnType<typeof userEvent.setup>;
+
+function quizFile(data: unknown, name = "my-quiz.json"): File {
+  return new File([JSON.stringify(data, null, 2)], name, { type: "application/json" });
+}
+
+async function upload(file: File): Promise<User> {
+  const user = userEvent.setup();
+  render(<App />);
+  await user.upload(screen.getByLabelText(/choose a json file/i), file);
+  return user;
+}
+
+async function startQuiz(data: unknown = QUIZ): Promise<User> {
+  const user = await upload(quizFile(data));
+  await user.click(await screen.findByRole("button", { name: /start quiz/i }));
+  return user;
+}
+
+/** The question currently on screen, read from the fieldset's legend. */
+function currentQuestionText(): string {
+  return screen.getByRole("group").querySelector("legend")?.textContent ?? "";
+}
+
+function correctRadio(): HTMLInputElement {
+  const answer = ANSWERS.get(currentQuestionText());
+  if (!answer) throw new Error(`No known answer for: "${currentQuestionText()}"`);
+  return screen.getByRole<HTMLInputElement>("radio", { name: answer });
+}
+
+function anIncorrectRadio(): HTMLInputElement {
+  const correct = correctRadio();
+  const wrong = screen
+    .getAllByRole<HTMLInputElement>("radio")
+    .find((radio) => radio !== correct);
+  if (!wrong) throw new Error("Question rendered fewer than two choices");
+  return wrong;
+}
+
+/** All review cards currently rendered, by outcome class. `queryAll` so that "none" is a
+ *  legitimate answer — the filter row can legitimately render an empty list. */
+function reviewItems(outcome?: "correct" | "incorrect" | "unanswered"): HTMLElement[] {
+  return screen
+    .queryAllByRole("listitem")
+    .filter(
+      (item) =>
+        item.classList.contains("review-item") &&
+        (outcome === undefined || item.classList.contains(`review-item--${outcome}`)),
+    );
+}
+
+/** Open the confirmation dialog from the sticky bar. */
+async function openSubmitDialog(user: User) {
+  await user.click(screen.getAllByRole("button", { name: /submit quiz/i })[0]!);
+  return screen.getByRole("dialog");
+}
+
+describe("upload screen", () => {
+  it("explains the schema and offers the template and sample downloads", () => {
+    render(<App />);
+
+    expect(screen.getByRole("heading", { name: /quiz file format/i })).toBeInTheDocument();
+    expect(screen.getByText(/"distractors"/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /download template json/i })).toHaveAttribute(
+      "download",
+      "quiz-template.json",
+    );
+    expect(screen.getByRole("link", { name: /download sample quiz/i })).toHaveAttribute(
+      "href",
+      "/sample-quiz.json",
+    );
+  });
+
+  it("states the privacy behaviour", () => {
+    render(<App />);
+    expect(
+      screen.getByText(/processed locally in your browser and is not uploaded or stored/i),
+    ).toBeInTheDocument();
+  });
+
+  it("offers a file picker and a drop target", () => {
+    render(<App />);
+    expect(screen.getByLabelText(/choose a json file/i)).toBeInTheDocument();
+    expect(screen.getByText(/drag and drop your \.json quiz file here/i)).toBeInTheDocument();
+  });
+
+  it("reports the valid question count and offers to start", async () => {
+    await upload(quizFile(QUIZ));
+
+    expect(await screen.findByText(/3 valid questions detected/i)).toBeInTheDocument();
+    expect(screen.getByText(/my-quiz\.json looks good/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /start quiz/i })).toBeEnabled();
+  });
+
+  it("singularises a one-question quiz", async () => {
+    await upload(quizFile([QUIZ[0]]));
+    expect(await screen.findByText(/1 valid question detected/i)).toBeInTheDocument();
+  });
+
+  it("refuses a malformed file and names the offending question", async () => {
+    await upload(quizFile([QUIZ[0], { question: "Broken?", answer: "a", distractors: ["b", "c"] }]));
+
+    expect(await screen.findByText(/could not be used/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Question 2: "distractors" must contain exactly 3 choices/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /start quiz/i })).not.toBeInTheDocument();
+  });
+
+  it("refuses invalid JSON", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.upload(
+      screen.getByLabelText(/choose a json file/i),
+      new File(['[{"question": '], "bad.json", { type: "application/json" }),
+    );
+
+    expect(await screen.findByText(/is not valid JSON/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /start quiz/i })).not.toBeInTheDocument();
+  });
+
+  it("says nothing was discarded when a file is rejected", async () => {
+    await upload(quizFile([{ question: "Only this" }]));
+    expect(await screen.findByText(/nothing was discarded/i)).toBeInTheDocument();
+  });
+
+  it("lets a rejected file be swapped for a good one", async () => {
+    const user = await upload(quizFile([{ question: "Only this" }]));
+    expect(await screen.findByText(/could not be used/i)).toBeInTheDocument();
+
+    await user.upload(screen.getByLabelText(/choose a json file/i), quizFile(QUIZ, "good.json"));
+
+    expect(await screen.findByText(/good\.json looks good/i)).toBeInTheDocument();
+    expect(screen.queryByText(/could not be used/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("quiz screen", () => {
+  it("shows progress, the question, and exactly four choices", async () => {
+    await startQuiz();
+
+    expect(screen.getByText("Question 1 of 3")).toBeInTheDocument();
+    expect(screen.getAllByRole("radio")).toHaveLength(4);
+    expect(screen.getByRole("progressbar")).toHaveAttribute(
+      "aria-valuetext",
+      "0 of 3 questions answered",
+    );
+    expect(QUIZ.map((entry) => entry.question)).toContain(currentQuestionText());
+  });
+
+  it("marks the current question as unanswered until a choice is made", async () => {
+    const user = await startQuiz();
+    expect(screen.getByText(/not answered yet/i)).toBeInTheDocument();
+
+    await user.click(correctRadio());
+
+    expect(screen.queryByText(/not answered yet/i)).not.toBeInTheDocument();
+    expect(screen.getByText("1 answered · 2 remaining")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar")).toHaveAttribute(
+      "aria-valuetext",
+      "1 of 3 questions answered",
+    );
+  });
+
+  it("moves forward and back, keeping the recorded answer", async () => {
+    const user = await startQuiz();
+    const firstQuestion = currentQuestionText();
+    await user.click(correctRadio());
+
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    expect(screen.getByText("Question 2 of 3")).toBeInTheDocument();
+    expect(currentQuestionText()).not.toBe(firstQuestion);
+
+    await user.click(screen.getByRole("button", { name: /previous/i }));
+    expect(screen.getByText("Question 1 of 3")).toBeInTheDocument();
+    expect(currentQuestionText()).toBe(firstQuestion);
+    expect(correctRadio()).toBeChecked();
+  });
+
+  it("disables Previous on the first question", async () => {
+    await startQuiz();
+    expect(screen.getByRole("button", { name: /previous/i })).toBeDisabled();
+  });
+
+  it("lets an answer be changed before submitting", async () => {
+    const user = await startQuiz();
+
+    await user.click(correctRadio());
+    expect(correctRadio()).toBeChecked();
+
+    const other = anIncorrectRadio();
+    await user.click(other);
+
+    expect(other).toBeChecked();
+    expect(correctRadio()).not.toBeChecked();
+    // Changing an answer must not count as a second answer.
+    expect(screen.getByText("1 answered · 2 remaining")).toBeInTheDocument();
+  });
+
+  it("jumps to any question from the navigator and marks answered ones", async () => {
+    const user = await startQuiz();
+    await user.click(correctRadio());
+
+    const navigator = screen.getByRole("complementary");
+    expect(
+      within(navigator).getByRole("button", { name: /question 1, answered/i }),
+    ).toBeInTheDocument();
+
+    await user.click(within(navigator).getByRole("button", { name: /question 3, not answered/i }));
+    expect(screen.getByText("Question 3 of 3")).toBeInTheDocument();
+  });
+
+  it("offers Submit instead of Next on the last question", async () => {
+    const user = await startQuiz();
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /next/i }));
+
+    expect(screen.getByText("Question 3 of 3")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /next/i })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /submit quiz/i })).toHaveLength(2);
+  });
+});
+
+describe("submission confirmation", () => {
+  it("warns how many questions are unanswered and can return to the quiz", async () => {
+    const user = await startQuiz();
+    await user.click(correctRadio());
+    const dialog = await openSubmitDialog(user);
+
+    expect(dialog).toHaveAccessibleName(/submit with unanswered questions/i);
+    expect(within(dialog).getByText(/2 of 3 questions are still unanswered/i)).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: /return to quiz/i }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByText("Question 1 of 3")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /your score/i })).not.toBeInTheDocument();
+  });
+
+  it("submits anyway when the user insists", async () => {
+    const user = await startQuiz();
+    await user.click(correctRadio());
+    await openSubmitDialog(user);
+    await user.click(screen.getByRole("button", { name: /submit anyway/i }));
+
+    expect(screen.getByRole("heading", { name: /your score/i })).toBeInTheDocument();
+    expect(screen.getByText("1 / 3")).toBeInTheDocument();
+  });
+
+  it("closes on Escape without submitting", async () => {
+    const user = await startQuiz();
+    await openSubmitDialog(user);
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByText("Question 1 of 3")).toBeInTheDocument();
+  });
+
+  it("does not warn when every question is answered", async () => {
+    const user = await answerEveryQuestion(await startQuiz());
+    const dialog = await openSubmitDialog(user);
+
+    expect(dialog).toHaveAccessibleName(/submit your quiz/i);
+    expect(within(dialog).getByText(/all 3 questions answered/i)).toBeInTheDocument();
+  });
+});
+
+/** Walk the whole quiz answering each question correctly. */
+async function answerEveryQuestion(user: User): Promise<User> {
+  for (let step = 0; step < QUIZ.length; step++) {
+    await user.click(correctRadio());
+    if (step < QUIZ.length - 1) await user.click(screen.getByRole("button", { name: /next/i }));
+  }
+  return user;
+}
+
+describe("results and review", () => {
+  async function completeAllCorrect(): Promise<User> {
+    const user = await answerEveryQuestion(await startQuiz());
+    const dialog = await openSubmitDialog(user);
+    await user.click(within(dialog).getByRole("button", { name: /submit quiz/i }));
+    return user;
+  }
+
+  it("reports raw score, percentage, and the correct/incorrect/unanswered split", async () => {
+    await completeAllCorrect();
+
+    expect(screen.getByText("3 / 3")).toBeInTheDocument();
+    expect(screen.getByText("100%")).toBeInTheDocument();
+
+    const stat = (label: string) =>
+      screen.getByText(label, { selector: ".stat__label" }).previousElementSibling;
+    expect(stat("Correct")).toHaveTextContent("3");
+    expect(stat("Incorrect")).toHaveTextContent("0");
+    expect(stat("Unanswered")).toHaveTextContent("0");
+    expect(stat("Questions")).toHaveTextContent("3");
+  });
+
+  it("reviews every question with the user's answer and the correct answer", async () => {
+    const user = await startQuiz();
+    await user.click(anIncorrectRadio());
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(correctRadio());
+    await openSubmitDialog(user);
+    await user.click(screen.getByRole("button", { name: /submit anyway/i }));
+
+    expect(screen.getByText("1 / 3")).toBeInTheDocument();
+    expect(reviewItems()).toHaveLength(3);
+    expect(reviewItems("correct")).toHaveLength(1);
+    expect(reviewItems("incorrect")).toHaveLength(1);
+    expect(reviewItems("unanswered")).toHaveLength(1);
+
+    // The incorrect card must show both what was chosen and what was right.
+    const wrongCard = reviewItems("incorrect")[0]!;
+    expect(within(wrongCard).getByText("Your answer")).toBeInTheDocument();
+    expect(within(wrongCard).getByText("Correct answer")).toBeInTheDocument();
+    expect(within(wrongCard).getAllByRole("listitem")).toHaveLength(4);
+
+    // The correct card marks a single row as both the selection and the answer.
+    expect(
+      within(reviewItems("correct")[0]!).getByText("Your answer · Correct"),
+    ).toBeInTheDocument();
+
+    // The skipped card says so in words, not only in colour.
+    expect(
+      within(reviewItems("unanswered")[0]!).getByText(/you did not answer this question/i),
+    ).toBeInTheDocument();
+  });
+
+  it("numbers review entries by the order they were shown, not the file order", async () => {
+    await completeAllCorrect();
+    expect(reviewItems().map((item) => within(item).getByText(/^Question \d$/).textContent)).toEqual(
+      ["Question 1", "Question 2", "Question 3"],
+    );
+  });
+
+  it("shows an explanation when the source question has one", async () => {
+    await completeAllCorrect();
+    expect(screen.getByText("Mercury orbits nearest the Sun.")).toBeInTheDocument();
+  });
+
+  it("filters the review to incorrect or unanswered questions", async () => {
+    const user = await completeAllCorrect();
+
+    await user.click(screen.getByRole("button", { name: /^incorrect 0$/i }));
+    expect(reviewItems()).toHaveLength(0);
+    expect(screen.getByText(/you did not miss a single question/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^all 3$/i }));
+    expect(reviewItems()).toHaveLength(3);
+  });
+});
+
+describe("restart", () => {
+  async function submitEmpty(): Promise<User> {
+    const user = await startQuiz();
+    await openSubmitDialog(user);
+    await user.click(screen.getByRole("button", { name: /submit anyway/i }));
+    return user;
+  }
+
+  it("reshuffles into a fresh attempt with no answers carried over", async () => {
+    const user = await submitEmpty();
+    expect(screen.getByText("0 / 3")).toBeInTheDocument();
+    expect(screen.getByText(/attempt 1/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /take again \(reshuffle\)/i }));
+
+    expect(screen.getByText("Question 1 of 3")).toBeInTheDocument();
+    expect(screen.getByText("0 answered · 3 remaining")).toBeInTheDocument();
+    expect(screen.getAllByRole<HTMLInputElement>("radio").every((radio) => !radio.checked)).toBe(
+      true,
+    );
+
+    // Same source file, so the new attempt still holds every question.
+    await openSubmitDialog(user);
+    await user.click(screen.getByRole("button", { name: /submit anyway/i }));
+    expect(screen.getByText("0 / 3")).toBeInTheDocument();
+    expect(screen.getByText(/attempt 2/i)).toBeInTheDocument();
+    expect(reviewItems()).toHaveLength(3);
+  });
+
+  it("returns to upload and clears the previous quiz", async () => {
+    const user = await submitEmpty();
+    await user.click(screen.getByRole("button", { name: /upload new quiz/i }));
+
+    expect(screen.getByRole("heading", { name: /take a quiz on demand/i })).toBeInTheDocument();
+    expect(screen.queryByText(/my-quiz\.json looks good/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /start quiz/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("0 / 3")).not.toBeInTheDocument();
+    expect(reviewItems()).toHaveLength(0);
+  });
+
+  it("abandons an in-progress quiz from the quiz screen", async () => {
+    const user = await startQuiz();
+    await user.click(correctRadio());
+
+    await user.click(screen.getByRole("button", { name: /upload new quiz/i }));
+
+    expect(screen.getByRole("heading", { name: /take a quiz on demand/i })).toBeInTheDocument();
+    expect(screen.queryByText("Question 1 of 3")).not.toBeInTheDocument();
+  });
+});
+
+describe("accessibility scaffolding", () => {
+  it("offers a skip link to the main landmark", () => {
+    render(<App />);
+    expect(screen.getByRole("link", { name: /skip to main content/i })).toHaveAttribute(
+      "href",
+      "#main",
+    );
+    expect(screen.getByRole("main")).toHaveAttribute("id", "main");
+  });
+
+  it("gives every screen a top-level heading", async () => {
+    const user = await startQuiz();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveAccessibleName(
+      /question 1 of 3/i,
+    );
+
+    await openSubmitDialog(user);
+    await user.click(screen.getByRole("button", { name: /submit anyway/i }));
+    expect(screen.getByRole("heading", { level: 1 })).toHaveAccessibleName(/your score/i);
+  });
+
+  it("groups the four choices under the question text", async () => {
+    await startQuiz();
+    const group = screen.getByRole("group");
+    expect(group).toHaveAccessibleName(currentQuestionText());
+    expect(within(group).getAllByRole("radio")).toHaveLength(4);
+  });
+
+  it("labels each choice with its answer text alone", async () => {
+    await startQuiz();
+    const question = QUIZ.find((entry) => entry.question === currentQuestionText())!;
+    for (const text of [question.answer, ...question.distractors]) {
+      expect(screen.getByRole("radio", { name: text })).toBeInTheDocument();
+    }
+  });
+
+  it("moves focus to the question when navigating", async () => {
+    const user = await startQuiz();
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    expect(screen.getByRole("group").querySelector("legend")).toHaveFocus();
+  });
+
+  it("moves focus into the new screen instead of dropping it on submit", async () => {
+    const user = await startQuiz();
+    await openSubmitDialog(user);
+    await user.click(screen.getByRole("button", { name: /submit anyway/i }));
+
+    // The button that was clicked has unmounted; focus must not fall back to <body>.
+    expect(screen.getByRole("main")).toHaveFocus();
+  });
+
+  it("does not steal focus on first load", () => {
+    render(<App />);
+    expect(document.body).toHaveFocus();
+  });
+});

@@ -1,0 +1,22 @@
+# Quiz on Demand — Cloudflare Workers static site.
+#
+# The app is 100% client-side: the uploaded quiz JSON is parsed, shuffled, and graded
+# in the browser. There is no Worker script, no backend route, and no storage binding —
+# only `[assets]`, which makes this a static-assets-only Worker.
+#
+# Deploy with:  npm run deploy      (runs `vite build` then `wrangler deploy`)
+# Local dev:    npm run dev         (Vite dev server — what you want day to day)
+# Workers-local: npm run cf:dev     (serves ./dist through the Workers runtime)
+
+name = "quiz-on-demand"
+compatibility_date = "2025-09-01"
+
+[assets]
+directory = "./dist"
+
+# Single-page app: unknown paths fall back to index.html instead of a 404, and
+# /index.html is served at "/" rather than redirecting.
+not_found_handling = "single-page-application"
+
+[observability]
+enabled = true

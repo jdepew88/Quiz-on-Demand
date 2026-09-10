@@ -1,0 +1,111 @@
+[
+  {
+    "question": "What is the capital of France?",
+    "answer": "Paris",
+    "distractors": ["London", "Berlin", "Madrid"]
+  },
+  {
+    "question": "What is 2 + 2?",
+    "answer": "4",
+    "distractors": ["3", "5", "6"]
+  },
+  {
+    "question": "Which planet is closest to the Sun?",
+    "answer": "Mercury",
+    "distractors": ["Venus", "Mars", "Earth"],
+    "explanation": "Mercury orbits at roughly 58 million km from the Sun. Venus is second."
+  },
+  {
+    "question": "Who wrote the play 'Romeo and Juliet'?",
+    "answer": "William Shakespeare",
+    "distractors": ["Charles Dickens", "Jane Austen", "Christopher Marlowe"]
+  },
+  {
+    "question": "What is the chemical symbol for gold?",
+    "answer": "Au",
+    "distractors": ["Ag", "Gd", "Go"],
+    "explanation": "Au comes from the Latin 'aurum'. Ag is silver, from 'argentum'."
+  },
+  {
+    "question": "How many continents are there on Earth?",
+    "answer": "7",
+    "distractors": ["5", "6", "8"]
+  },
+  {
+    "question": "Which ocean is the largest by surface area?",
+    "answer": "Pacific Ocean",
+    "distractors": ["Atlantic Ocean", "Indian Ocean", "Arctic Ocean"]
+  },
+  {
+    "question": "In what year did the first human land on the Moon?",
+    "answer": "1969",
+    "distractors": ["1961", "1972", "1958"]
+  },
+  {
+    "question": "What is the largest mammal on Earth?",
+    "answer": "Blue whale",
+    "distractors": ["African elephant", "Sperm whale", "Giraffe"]
+  },
+  {
+    "question": "Which gas do plants primarily absorb during photosynthesis?",
+    "answer": "Carbon dioxide",
+    "distractors": ["Oxygen", "Nitrogen", "Hydrogen"],
+    "explanation": "Plants take in carbon dioxide and release oxygen as a by-product."
+  },
+  {
+    "question": "What is the square root of 144?",
+    "answer": "12",
+    "distractors": ["14", "16", "24"]
+  },
+  {
+    "question": "Which language has the most native speakers worldwide?",
+    "answer": "Mandarin Chinese",
+    "distractors": ["English", "Spanish", "Hindi"]
+  },
+  {
+    "question": "What is the hardest naturally occurring substance?",
+    "answer": "Diamond",
+    "distractors": ["Quartz", "Steel", "Titanium"]
+  },
+  {
+    "question": "Approximately how many bones are in the adult human body?",
+    "answer": "206",
+    "distractors": ["186", "226", "306"],
+    "explanation": "Babies are born with about 300 bones; many fuse together during growth."
+  },
+  {
+    "question": "Which country hosted the 2016 Summer Olympics?",
+    "answer": "Brazil",
+    "distractors": ["China", "United Kingdom", "Japan"]
+  },
+  {
+    "question": "What does 'HTTP' stand for?",
+    "answer": "HyperText Transfer Protocol",
+    "distractors": [
+      "HyperText Transmission Process",
+      "High Throughput Transfer Protocol",
+      "Hyperlink Text Transport Protocol"
+    ]
+  },
+  {
+    "question": "Who painted the Mona Lisa?",
+    "answer": "Leonardo da Vinci",
+    "distractors": ["Michelangelo", "Raphael", "Vincent van Gogh"]
+  },
+  {
+    "question": "What is the boiling point of water at sea level in degrees Celsius?",
+    "answer": "100",
+    "distractors": ["90", "120", "212"],
+    "explanation": "212 is the boiling point in degrees Fahrenheit, not Celsius."
+  },
+  {
+    "question": "Which of these is a prime number?",
+    "answer": "29",
+    "distractors": ["27", "33", "51"]
+  },
+  {
+    "question": "What is the longest river in the world by length?",
+    "answer": "The Nile",
+    "distractors": ["The Amazon", "The Yangtze", "The Mississippi"]
+  }
+]
