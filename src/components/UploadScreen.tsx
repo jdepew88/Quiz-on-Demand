@@ -9,7 +9,7 @@ import {
 } from "react";
 import { FormatGuide, SAMPLE_FILE } from "./FormatGuide";
 import { HeroVisual } from "./HeroVisual";
-import { IconAlert, IconArrowRight, IconPencil, IconPlay, IconUpload } from "./Icons";
+import { IconAlert, IconBook, IconPlay, IconUpload } from "./Icons";
 import { PrivacyNote } from "./PrivacyNote";
 import { SetupScreen } from "./SetupScreen";
 import type { AttemptOptions } from "../lib/attempt";
@@ -249,8 +249,6 @@ export function UploadScreen({
                 </section>
               )}
             </div>
-
-            <PrivacyNote />
           </section>
         </div>
 
@@ -272,10 +270,7 @@ export function UploadScreen({
               <IconUpload size={20} />
             </span>
             <span className="start-card__title">Upload a quiz</span>
-            <span className="start-card__text">Pick a .json quiz file from your device.</span>
-            <span className="start-card__arrow" aria-hidden="true">
-              <IconArrowRight size={18} />
-            </span>
+            <span className="start-card__text">Use your own JSON file. It stays on your device.</span>
           </button>
 
           <button
@@ -289,26 +284,21 @@ export function UploadScreen({
             </span>
             <span className="start-card__title">Try a sample quiz</span>
             <span className="start-card__text">
-              Twenty general-knowledge questions, ready to go.
-            </span>
-            <span className="start-card__arrow" aria-hidden="true">
-              <IconArrowRight size={18} />
+              Explore a ready-made quiz with twenty quick questions.
             </span>
           </button>
 
           <a className="start-card" href="#format-guide">
             <span className="start-card__icon" aria-hidden="true">
-              <IconPencil size={20} />
+              <IconBook size={20} />
             </span>
             <span className="start-card__title">Make your own</span>
             <span className="start-card__text">
-              Write questions in a simple text file. The format takes a minute to learn.
-            </span>
-            <span className="start-card__arrow" aria-hidden="true">
-              <IconArrowRight size={18} />
+              Use the format guide to write your own quizzes.
             </span>
           </a>
         </div>
+        <PrivacyNote />
       </section>
 
       <FormatGuide />

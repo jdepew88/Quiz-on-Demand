@@ -332,7 +332,7 @@ pre {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  min-height: 4.25rem;
+  min-height: 3.75rem;
 }
 
 .wordmark {
@@ -675,18 +675,20 @@ pre.code {
   position: relative;
 }
 
+/* Two columns from 62rem: copy and upload on the left (~46%), the card composition on the
+   right (~54%). Aligned to the top, not centred, so the hero starts right under the header. */
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: clamp(2rem, 5vw, 3rem);
-  align-items: center;
-  padding-block: clamp(1.75rem, 5vw, 3.5rem) clamp(1.5rem, 4vw, 2.5rem);
+  gap: clamp(1.75rem, 4vw, 2.5rem);
+  align-items: start;
+  padding-block: clamp(1.25rem, 3.5vw, 2.25rem) 0;
 }
 
 @media (min-width: 62rem) {
   .hero {
-    grid-template-columns: minmax(0, 11fr) minmax(0, 9fr);
-    gap: clamp(2rem, 6vw, 5rem);
+    grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
+    gap: clamp(2rem, 4vw, 3.5rem);
   }
 }
 
@@ -695,29 +697,32 @@ pre.code {
 }
 
 .hero__eyebrow {
-  margin-bottom: 0.9rem;
+  margin-bottom: 0.75rem;
+  color: var(--color-warning);
+  font-size: 0.75rem;
+  letter-spacing: 0.22em;
 }
 
 .hero__title {
   max-width: 10ch;
   font-family: var(--font-serif);
-  font-size: clamp(2.6rem, 7vw, 4.5rem);
-  font-weight: 600;
-  line-height: 1.02;
-  letter-spacing: -0.025em;
+  font-size: clamp(2.75rem, 6.2vw, 5rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
 }
 
-/* A highlighter stroke under the second line — the one splash of gold on the page. */
+/* A broad highlighter block behind the second line — the one splash of gold on the page. */
 .hero__mark {
   display: inline-block;
-  padding-inline: 0.08em;
-  margin-inline: -0.08em;
+  padding-inline: 0.1em;
+  margin-inline: -0.1em;
   background: linear-gradient(
     to bottom,
-    transparent 56%,
-    var(--color-highlight-soft) 56%,
-    var(--color-highlight-soft) 94%,
-    transparent 94%
+    transparent 28%,
+    var(--color-highlight-soft) 28%,
+    var(--color-highlight-soft) 96%,
+    transparent 96%
   );
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
@@ -725,27 +730,27 @@ pre.code {
 }
 
 .hero__lede {
-  max-width: 32rem;
-  margin-top: 1.1rem;
+  max-width: 30rem;
+  margin-top: 1rem;
   color: var(--color-text-muted);
-  font-size: clamp(1.0625rem, 2.2vw, 1.1875rem);
-  line-height: 1.55;
+  font-size: clamp(1.0625rem, 2vw, 1.1875rem);
+  line-height: 1.5;
 }
 
 .upload {
-  max-width: 36rem;
-  margin-top: clamp(1.5rem, 4vw, 2.25rem);
+  max-width: 30rem;
+  margin-top: clamp(1.25rem, 3vw, 1.75rem);
 }
 
 .dropzone {
   display: grid;
   justify-items: center;
-  gap: 0.5rem;
-  padding: clamp(1.5rem, 4vw, 2.25rem) 1.25rem;
+  gap: 0.4rem;
+  padding: 1.5rem 1.25rem 1.35rem;
   border: 1.5px dashed var(--color-accent-soft-border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
   text-align: center;
   cursor: pointer;
   transition:
@@ -757,6 +762,7 @@ pre.code {
 
 .dropzone:hover {
   border-color: var(--color-accent);
+  box-shadow: var(--shadow-md);
 }
 
 .dropzone--active {
@@ -774,16 +780,16 @@ pre.code {
 .dropzone__icon {
   display: grid;
   place-items: center;
-  width: 3.25rem;
-  height: 3.25rem;
-  margin-bottom: 0.2rem;
-  border-radius: var(--radius-lg);
+  width: 2.75rem;
+  height: 2.75rem;
+  margin-bottom: 0.1rem;
+  border-radius: var(--radius-md);
   background: var(--color-accent-soft);
   color: var(--color-accent);
 }
 
 .dropzone__title {
-  font-size: 1.1875rem;
+  font-size: 1.0625rem;
   font-weight: 700;
   letter-spacing: -0.01em;
 }
@@ -794,13 +800,13 @@ pre.code {
 
 .dropzone__or {
   color: var(--color-text-muted);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
 }
 
 .dropzone__hint {
-  margin-top: 0.3rem;
+  margin-top: 0.2rem;
   color: var(--color-text-muted);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
 }
 
 /* On touch screens there is nothing to drag; lead with the tap. */
@@ -839,14 +845,17 @@ pre.code {
   display: none;
 }
 
+/* The privacy promise sits centred beneath the start cards, between two hairlines. */
 .trust-note {
   display: flex;
+  justify-content: center;
   align-items: flex-start;
   gap: 0.5rem;
-  max-width: 32rem;
-  margin: 1rem 0 0;
+  max-width: 44rem;
+  margin: 1.25rem auto 0;
   color: var(--color-text-muted);
   font-size: 0.875rem;
+  text-align: left;
 }
 
 .trust-note__icon {
@@ -855,54 +864,75 @@ pre.code {
   color: var(--color-accent);
 }
 
-/* --- hero visual: a stack of quiz cards built from the quiz's own primitives --- */
+/* --- hero visual: a tilted stack of quiz cards built from the quiz's own primitives --- */
 
 .hero-visual {
-  display: grid;
-  gap: 1.25rem;
-  justify-items: center;
   min-width: 0;
+}
+
+.hero-visual__scene {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 1rem;
 }
 
 .hero-visual__stack {
   position: relative;
-  width: min(100%, 23rem);
-  /* Room for the two cards peeking out behind the front one. */
-  margin: 1.5rem 1.75rem 1.75rem 0;
+  width: min(100%, 26rem);
+  /* Room for the rotated cards and the shapes around them. */
+  margin: 1.5rem 0 2rem;
 }
 
 .hero-visual__shape {
   position: absolute;
   z-index: 0;
-  border-radius: 50%;
   pointer-events: none;
 }
 
+/* A gold disc behind the right edge of the stack. */
 .hero-visual__shape--disc {
-  top: -2.25rem;
-  right: -2.25rem;
+  top: 32%;
+  right: -4.5rem;
+  width: 9rem;
+  height: 9rem;
+  border-radius: 50%;
+  background: var(--color-highlight-soft);
+  opacity: 0.85;
+}
+
+/* A thin gold arc off the top-left corner. */
+.hero-visual__shape--arc {
+  top: -1.25rem;
+  left: -3.25rem;
   width: 7.5rem;
   height: 7.5rem;
-  background: var(--color-accent-soft);
+  border: 2px solid var(--color-highlight);
+  border-radius: 50%;
+  clip-path: polygon(0 0, 55% 0, 55% 55%, 0 55%);
+  opacity: 0.7;
 }
 
-.hero-visual__shape--ring {
-  bottom: -2.5rem;
-  left: -2.75rem;
-  width: 6.5rem;
-  height: 6.5rem;
-  border: 10px solid var(--color-highlight-soft);
+/* A small dot grid at the top right. Painted with a gradient, so no image or data: URI. */
+.hero-visual__shape--dots {
+  top: -2.75rem;
+  right: -4rem;
+  width: 5rem;
+  height: 3.25rem;
+  background-image: radial-gradient(var(--color-border-strong) 1.5px, transparent 1.6px);
+  background-size: 0.75rem 0.75rem;
+  opacity: 0.9;
 }
 
-.hero-visual__shape--tile {
-  top: 45%;
-  left: -1.75rem;
-  width: 1.9rem;
-  height: 1.9rem;
-  border-radius: 6px;
+/* A deep green blob low on the left, mostly hidden behind the cards. */
+.hero-visual__shape--blob {
+  bottom: -1.75rem;
+  left: 1.5rem;
+  width: 11rem;
+  height: 5.5rem;
+  border-radius: 50% 50% 45% 55% / 60% 60% 40% 40%;
   background: var(--color-accent);
-  transform: rotate(18deg);
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
 .demo-card {
@@ -915,27 +945,32 @@ pre.code {
 .demo-card--front {
   position: relative;
   z-index: 3;
-  padding: 1.25rem 1.3rem 1.3rem;
+  padding: 1.4rem 1.5rem 1.5rem;
+  box-shadow: var(--shadow-lg);
+  transform: rotate(-6deg);
 }
 
 .demo-card--back-1,
 .demo-card--back-2 {
   position: absolute;
   inset: 0;
-  box-shadow: none;
 }
 
+/* A cream card peeking out behind the top-right edge. */
 .demo-card--back-1 {
   z-index: 2;
   background: var(--color-surface-2);
-  transform: translate(0.9rem, 0.9rem) rotate(2deg);
+  box-shadow: var(--shadow-sm);
+  transform: translate(1.4rem, -0.9rem) rotate(-2deg);
 }
 
+/* A deep green card furthest back, setting the stack against the page. */
 .demo-card--back-2 {
   z-index: 1;
-  background: var(--color-accent-soft);
-  border-color: var(--color-accent-soft-border);
-  transform: translate(1.75rem, 1.75rem) rotate(4deg);
+  border-color: transparent;
+  background: var(--color-accent);
+  box-shadow: none;
+  transform: translate(2.9rem, -1.9rem) rotate(2deg);
 }
 
 .demo-card__meta {
@@ -945,47 +980,34 @@ pre.code {
   gap: 1rem;
 }
 
-.demo-card__count {
+.demo-card__tag {
+  padding: 0.2rem 0.65rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-soft);
   color: var(--color-accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.demo-card__count {
+  color: var(--color-text-muted);
   font-size: 0.8125rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
-.demo-card__progress {
-  display: flex;
-  flex: 1;
-  max-width: 9rem;
-  gap: 3px;
-}
-
-.demo-card__progress i {
-  flex: 1;
-  height: 5px;
-  border-radius: var(--radius-pill);
-  background: var(--color-border);
-}
-
-.demo-card__progress .is-done {
-  background: var(--color-accent);
-}
-
-.demo-card__progress .is-current {
-  background: var(--color-highlight);
-}
-
 .demo-card__question {
-  margin: 0.9rem 0 0.9rem;
+  margin: 1rem 0 1rem;
   font-family: var(--font-serif);
-  font-size: 1.15rem;
+  font-size: 1.3rem;
   font-weight: 600;
-  line-height: 1.3;
-  letter-spacing: -0.01em;
+  line-height: 1.28;
+  letter-spacing: -0.012em;
 }
 
 .demo-choices {
   display: grid;
-  gap: 0.45rem;
+  gap: 0.5rem;
   padding: 0;
   list-style: none;
 }
@@ -993,13 +1015,13 @@ pre.code {
 .demo-choice {
   display: flex;
   align-items: center;
-  gap: 0.7rem;
-  min-height: 2.6rem;
-  padding: 0.45rem 0.7rem;
+  gap: 0.75rem;
+  min-height: 2.85rem;
+  padding: 0.5rem 0.8rem;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   background: var(--color-surface);
-  font-size: 0.9375rem;
+  font-size: 1rem;
 }
 
 .demo-choice--selected {
@@ -1013,12 +1035,12 @@ pre.code {
   display: grid;
   place-items: center;
   flex: none;
-  width: 1.6rem;
-  height: 1.6rem;
+  width: 1.75rem;
+  height: 1.75rem;
   border: 1.5px solid var(--color-control);
-  border-radius: 6px;
+  border-radius: 7px;
   color: var(--color-text-muted);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 700;
 }
 
@@ -1037,73 +1059,147 @@ pre.code {
   color: var(--color-accent);
 }
 
-.chips {
+/* Three small product callouts. On wide screens they hang off the right edge of the stack;
+   narrower than that they fall into a row underneath it. */
+.callouts {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 0.5rem;
+  gap: 0.6rem;
+  width: 100%;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.chip {
-  display: inline-flex;
+.callout {
+  display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.4rem 0.85rem;
+  gap: 0.7rem;
+  min-width: 10.5rem;
+  padding: 0.7rem 1rem 0.7rem 0.75rem;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
-  color: var(--color-text);
-  font-size: 0.875rem;
-  font-weight: 600;
+  box-shadow: var(--shadow-md);
 }
 
-.chip__icon {
+.callout__icon {
+  display: grid;
+  place-items: center;
   flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-md);
+  background: var(--color-accent-soft);
   color: var(--color-accent);
 }
 
-/* On narrow screens the stack is trimmed: only the front card and the shapes stay, and
-   nothing may stick out past the gutter. */
+.callout__body {
+  display: grid;
+  line-height: 1.25;
+}
+
+.callout__title {
+  font-weight: 700;
+  font-size: 0.9375rem;
+}
+
+.callout__text {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+@media (min-width: 62rem) {
+  .hero-visual__scene {
+    justify-items: start;
+    /* Space on the right for the callouts that overlap the stack's edge. */
+    padding-right: 9.5rem;
+    padding-top: 1.75rem;
+  }
+
+  .hero-visual__stack {
+    width: min(100%, 27rem);
+    margin: 0.5rem 0 2.5rem 1.5rem;
+  }
+
+  .callouts {
+    position: absolute;
+    top: 3.5rem;
+    right: 0;
+    z-index: 4;
+    flex-direction: column;
+    align-items: stretch;
+    width: 11.5rem;
+    gap: 0.8rem;
+  }
+
+  .callout {
+    transform: rotate(-3deg);
+  }
+
+  .callout:nth-child(2) {
+    transform: rotate(-3deg) translateX(-0.75rem);
+  }
+
+  .callout:nth-child(3) {
+    transform: rotate(-3deg) translateX(-1.5rem);
+  }
+}
+
+/* On narrow screens the stack is trimmed: the front card stays upright and smaller, the
+   back cards and the larger shapes go, and nothing may stick out past the gutter. */
 @media (max-width: 61.99rem) {
   .hero-visual__stack {
     width: min(100%, 22rem);
-    margin: 1rem 0 1rem;
+    margin: 1rem 0 1.25rem;
+  }
+
+  .demo-card--front {
+    transform: rotate(-2deg);
+    box-shadow: var(--shadow-md);
   }
 
   .demo-card--back-2,
-  .hero-visual__shape--ring,
-  .hero-visual__shape--tile {
+  .hero-visual__shape--arc,
+  .hero-visual__shape--blob {
     display: none;
   }
 
   .demo-card--back-1 {
-    transform: translate(0.55rem, 0.55rem) rotate(1.5deg);
+    transform: translate(0.6rem, -0.5rem) rotate(0deg);
   }
 
   .hero-visual__shape--disc {
     top: -1.25rem;
-    right: -0.75rem;
-    width: 5rem;
-    height: 5rem;
+    right: -0.5rem;
+    width: 5.5rem;
+    height: 5.5rem;
+  }
+
+  .hero-visual__shape--dots {
+    top: auto;
+    bottom: -1rem;
+    right: 0.5rem;
+    width: 4rem;
+    height: 2.5rem;
   }
 }
 
-/* --- three ways to start --- */
+/* --- three ways to start: one horizontal strip beneath the hero --- */
 
 .starts {
-  margin-top: clamp(1.5rem, 4vw, 2.5rem);
+  margin-top: clamp(1.5rem, 3.5vw, 2.25rem);
 }
 
 .starts__grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 0.85rem;
+  gap: 0.75rem;
 }
 
-@media (min-width: 46rem) {
+/* One horizontal strip only where three cards fit without wrapping their titles. */
+@media (min-width: 62rem) {
   .starts__grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 1rem;
@@ -1111,18 +1207,18 @@ pre.code {
 }
 
 .start-card {
-  position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
   grid-template-areas:
-    "icon title arrow"
-    "icon text arrow";
-  align-items: center;
-  column-gap: 0.9rem;
-  row-gap: 0.15rem;
+    "icon title"
+    "icon text";
+  align-content: center;
+  column-gap: 1rem;
+  row-gap: 0.1rem;
   width: 100%;
-  min-height: 5rem;
-  padding: 1rem 1.1rem;
+  min-height: 6rem;
+  padding: 1rem 1.15rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
@@ -1153,9 +1249,10 @@ pre.code {
   grid-area: icon;
   display: grid;
   place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  border-radius: var(--radius-md);
+  align-self: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 50%;
   background: var(--color-accent-soft);
   color: var(--color-accent);
 }
@@ -1163,7 +1260,10 @@ pre.code {
 .start-card__title {
   grid-area: title;
   align-self: end;
+  font-family: var(--font-serif);
+  font-size: 1.125rem;
   font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .start-card__text {
@@ -1172,44 +1272,6 @@ pre.code {
   color: var(--color-text-muted);
   font-size: 0.875rem;
   line-height: 1.4;
-}
-
-.start-card__arrow {
-  grid-area: arrow;
-  display: grid;
-  color: var(--color-text-muted);
-  transition:
-    color var(--dur-1) ease,
-    transform var(--dur-2) var(--ease-out);
-}
-
-.start-card:hover:not(:disabled) .start-card__arrow {
-  color: var(--color-accent);
-  transform: translateX(3px);
-}
-
-@media (min-width: 46rem) {
-  .start-card {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "icon arrow"
-      "title title"
-      "text text";
-    /* Cards in a row are stretched to one height; keep the slack below the text so the
-       titles line up whether the description wraps or not. */
-    grid-template-rows: auto auto 1fr;
-    align-content: start;
-    row-gap: 0.25rem;
-    padding: 1.25rem 1.25rem 1.35rem;
-  }
-
-  .start-card__icon {
-    margin-bottom: 0.6rem;
-  }
-
-  .start-card__arrow {
-    align-self: start;
-  }
 }
 
 /* Validation problems: a readable report, not a stack trace. */

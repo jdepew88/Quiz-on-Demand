@@ -827,9 +827,9 @@ describe("setup screen options", () => {
   it("drops the Format guide link from the header while the setup screen is showing", async () => {
     const user = await upload(quizFile(QUIZ));
     await screen.findByText("Ready to begin");
-    expect(screen.queryByRole("link", { name: /format guide/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Format guide" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /choose a different file/i }));
-    expect(screen.getByRole("link", { name: /format guide/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Format guide" })).toBeInTheDocument();
   });
 });
