@@ -539,3 +539,62 @@ describe("scoring and review with variable choice counts", () => {
     expect(source).toEqual(snapshot);
   });
 });
+
+describe("attempt options", () => {
+  /** Deterministic "random" source that always picks index 0, so a shuffle reverses order. */
+  const alwaysZero = () => 0;
+
+  it("keeps the file's question order when shuffling is switched off", () => {
+    const source = makeSource(5);
+    const attempt = buildAttempt(source, 1, alwaysZero, { shuffleQuestions: false });
+
+    expect(attempt.questions.map((question) => question.sourceIndex)).toEqual([0, 1, 2, 3, 4]);
+    expect(attempt.questions.map((question) => question.prompt)).toEqual(
+      source.map((question) => question.question),
+    );
+  });
+
+  it("still shuffles the choices of every question when question shuffling is off", () => {
+    const source = makeSource(3);
+    const attempt = buildAttempt(source, 1, alwaysZero, { shuffleQuestions: false });
+
+    for (const question of attempt.questions) {
+      // With the always-zero source the correct answer (listed first) ends up last.
+      expect(question.choices.at(-1)?.id).toBe(question.correctChoiceId);
+    }
+  });
+
+  it("shortens the attempt to the requested number of questions", () => {
+    const source = makeSource(20);
+    const attempt = buildAttempt(source, 1, Math.random, { limit: 5 });
+
+    expect(attempt.questions).toHaveLength(5);
+    // Each kept question is a distinct source question with every one of its choices.
+    const sourceIndexes = new Set(attempt.questions.map((question) => question.sourceIndex));
+    expect(sourceIndexes.size).toBe(5);
+    for (const question of attempt.questions) expect(question.choices).toHaveLength(4);
+  });
+
+  it("takes the first questions in file order when both limited and unshuffled", () => {
+    const attempt = buildAttempt(makeSource(10), 1, Math.random, {
+      shuffleQuestions: false,
+      limit: 3,
+    });
+    expect(attempt.questions.map((question) => question.sourceIndex)).toEqual([0, 1, 2]);
+  });
+
+  it.each([0, -1, 2.5, 20, 25])("ignores a limit of %s for a 20-question file", (limit) => {
+    const attempt = buildAttempt(makeSource(20), 1, Math.random, { limit });
+    expect(attempt.questions).toHaveLength(20);
+  });
+
+  it("defaults to shuffling every question", () => {
+    const source = makeSource(5);
+    const attempt = buildAttempt(source, 1, alwaysZero, {});
+    const order = attempt.questions.map((question) => question.sourceIndex);
+    // Fisher-Yates driven by a constant zero rotates the list, so the order is a
+    // permutation that is not the file order.
+    expect([...order].sort()).toEqual([0, 1, 2, 3, 4]);
+    expect(order).not.toEqual([0, 1, 2, 3, 4]);
+  });
+});

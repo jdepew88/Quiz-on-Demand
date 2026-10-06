@@ -94,14 +94,19 @@ export function FormatGuide() {
   return (
     <section id="format-guide" className="guide" aria-labelledby="format-heading">
       <header className="guide__header">
-        <p className="eyebrow">Write your own</p>
-        <h2 id="format-heading" className="section-title">
-          Quiz file format
-        </h2>
-        <p className="guide__intro">
-          A quiz is a plain-text JSON file — a list of questions, each with its correct answer and
-          a few wrong ones. Any text editor can make one.
-        </p>
+        <div className="guide__heading">
+          <p className="eyebrow">Make your own</p>
+          <h2 id="format-heading" className="section-title">
+            Quiz file format
+          </h2>
+          <p className="guide__intro">
+            A quiz is a plain-text JSON file — a list of questions, each with its correct answer
+            and a few wrong ones. Any text editor can make one.
+          </p>
+        </div>
+        <a className="btn btn--secondary" href={TEMPLATE_FILE} download="quiz-template.json">
+          <IconDownload size={18} /> Download template JSON
+        </a>
       </header>
 
       <dl className="terms">

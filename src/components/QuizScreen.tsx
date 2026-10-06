@@ -6,6 +6,12 @@ import { choiceLabel } from "../lib/choices";
 import type { QuizAttempt, Selections } from "../lib/types";
 
 /**
+ * Up to this many questions the progress indicator is one segment per question; beyond it
+ * the segments would be too thin to read, so a continuous bar takes over.
+ */
+const MAX_PROGRESS_SEGMENTS = 40;
+
+/**
  * The quiz screen. The question is the visual centre; progress sits in a slim sticky bar
  * above it, and navigation below it is deliberately quieter than the answer choices.
  *
@@ -72,7 +78,13 @@ export function QuizScreen({
       <div className="quiz-bar">
         <div className="container container--reading quiz-bar__inner">
           <p className="quiz-bar__status">
-            <span className="quiz-bar__count">
+            {/* "7 / 20" on screen; the words are for assistive technology. */}
+            <span className="quiz-bar__count" aria-hidden="true">
+              {index + 1}
+              <span className="quiz-bar__slash"> / </span>
+              {total}
+            </span>
+            <span className="visually-hidden">
               Question {index + 1} of {total}
             </span>
             <span className="quiz-bar__answered">
@@ -92,16 +104,34 @@ export function QuizScreen({
             </button>
           </div>
         </div>
-        <div
-          className="progress"
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={total}
-          aria-valuenow={answered}
-          aria-valuetext={`${answered} of ${total} questions answered`}
-          aria-label="Quiz progress"
-        >
-          <div className="progress__fill" style={{ width: `${percentComplete}%` }} />
+
+        <div className="container container--reading">
+          <div
+            className={`progress${total <= MAX_PROGRESS_SEGMENTS ? " progress--segmented" : ""}`}
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={total}
+            aria-valuenow={answered}
+            aria-valuetext={`${answered} of ${total} questions answered`}
+            aria-label="Quiz progress"
+          >
+            {total <= MAX_PROGRESS_SEGMENTS ? (
+              attempt.questions.map((item, itemIndex) => (
+                <span
+                  key={item.id}
+                  className={[
+                    "progress__segment",
+                    selections[item.id] ? "progress__segment--done" : "",
+                    itemIndex === index ? "progress__segment--current" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                />
+              ))
+            ) : (
+              <div className="progress__fill" style={{ width: `${percentComplete}%` }} />
+            )}
+          </div>
         </div>
       </div>
 
@@ -177,12 +207,20 @@ export function QuizScreen({
               <IconArrowLeft size={18} /> Previous
             </button>
             {isLast ? (
-              <button type="button" className="btn btn--primary" onClick={() => setConfirming(true)}>
+              <button
+                type="button"
+                className="btn btn--primary btn--lg"
+                onClick={() => setConfirming(true)}
+              >
                 Submit quiz
               </button>
             ) : (
-              <button type="button" className="btn btn--secondary" onClick={() => goTo(index + 1)}>
-                Next <IconArrowRight size={18} />
+              <button
+                type="button"
+                className="btn btn--primary btn--lg"
+                onClick={() => goTo(index + 1)}
+              >
+                Next question <IconArrowRight size={18} />
               </button>
             )}
           </nav>

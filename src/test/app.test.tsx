@@ -97,6 +97,13 @@ function questionGroup(): HTMLElement {
   return within(screen.getByRole("main")).getByRole("group");
 }
 
+/** The value of one setup-screen stat tile, found by its label. */
+function stat(label: string): HTMLElement {
+  const value = screen.getByText(label, { selector: "dt" }).nextElementSibling;
+  if (!(value instanceof HTMLElement)) throw new Error(`No value for stat "${label}"`);
+  return value;
+}
+
 /** Each validation problem as one line of text, e.g. "Question 2: <message>". */
 function issueTexts(): string[] {
   return Array.from(document.querySelectorAll(".issues__list li"), (item) => item.textContent ?? "");
@@ -136,7 +143,7 @@ describe("upload screen", () => {
     await upload(quizFile(QUIZ));
 
     expect(await screen.findByText("Ready to begin")).toBeInTheDocument();
-    expect(screen.getByText("3 questions")).toBeInTheDocument();
+    expect(stat("Questions")).toHaveTextContent(/^3$/);
     expect(screen.getByText("my-quiz.json")).toBeInTheDocument();
     // A readable title is derived from the file name, since the format has no title field.
     expect(screen.getByRole("heading", { name: "My Quiz" })).toBeInTheDocument();
@@ -145,7 +152,8 @@ describe("upload screen", () => {
 
   it("singularises a one-question quiz", async () => {
     await upload(quizFile([QUIZ[0]]));
-    expect(await screen.findByText("1 question")).toBeInTheDocument();
+    await screen.findByText("Ready to begin");
+    expect(stat("Questions")).toHaveTextContent(/^1$/);
   });
 
   it("refuses a malformed file and names the offending question", async () => {
@@ -159,7 +167,8 @@ describe("upload screen", () => {
   it("accepts a two-distractor question that the old exactly-three rule rejected", async () => {
     await upload(quizFile([QUIZ[0], { question: "Fine?", answer: "a", distractors: ["b", "c"] }]));
 
-    expect(await screen.findByText("2 questions")).toBeInTheDocument();
+    await screen.findByText("Ready to begin");
+    expect(stat("Questions")).toHaveTextContent(/^2$/);
     expect(screen.getByRole("button", { name: /start quiz/i })).toBeEnabled();
   });
 
@@ -291,7 +300,7 @@ describe("submission confirmation", () => {
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByText("Question 1 of 3")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: /your score/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /quiz complete/i })).not.toBeInTheDocument();
   });
 
   it("submits anyway when the user insists", async () => {
@@ -300,7 +309,7 @@ describe("submission confirmation", () => {
     await openSubmitDialog(user);
     await user.click(screen.getByRole("button", { name: /submit anyway/i }));
 
-    expect(screen.getByRole("heading", { name: /your score/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /quiz complete/i })).toBeInTheDocument();
     expect(screen.getByText("1 out of 3 correct")).toBeInTheDocument();
   });
 
@@ -344,14 +353,15 @@ describe("results and review", () => {
     await completeAllCorrect();
 
     expect(screen.getByText("3 out of 3 correct")).toBeInTheDocument();
-    expect(screen.getByText("100%")).toBeInTheDocument();
+    expect(screen.getAllByText("100%").length).toBeGreaterThan(0);
 
-    // Each tally is a <dt>/<dd> pair: the label, then its count. The total is covered by
-    // "3 out of 3 correct" above.
+    // Each result card is a <dt>/<dd> pair: the label, then its value. The total is
+    // covered by "3 out of 3 correct" above.
     const tally = (label: string) => screen.getByText(label, { selector: "dt" }).nextElementSibling;
     expect(tally("Correct")).toHaveTextContent("3");
-    expect(tally("Incorrect")).toHaveTextContent("0");
+    expect(tally("Missed")).toHaveTextContent("0");
     expect(tally("Unanswered")).toHaveTextContent("0");
+    expect(tally("Accuracy")).toHaveTextContent("100%");
   });
 
   it("reviews every question with the user's answer and the correct answer", async () => {
@@ -400,7 +410,7 @@ describe("results and review", () => {
   it("filters the review to incorrect or unanswered questions", async () => {
     const user = await completeAllCorrect();
 
-    await user.click(screen.getByRole("button", { name: /^incorrect 0$/i }));
+    await user.click(screen.getByRole("button", { name: /^missed 0$/i }));
     expect(reviewItems()).toHaveLength(0);
     expect(screen.getByText(/you did not miss a single question/i)).toBeInTheDocument();
 
@@ -422,7 +432,7 @@ describe("restart", () => {
     expect(screen.getByText("0 out of 3 correct")).toBeInTheDocument();
     expect(screen.getByText(/attempt 1/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /take again \(reshuffle\)/i }));
+    await user.click(screen.getByRole("button", { name: /take it again/i }));
 
     expect(screen.getByText("Question 1 of 3")).toBeInTheDocument();
     expect(screen.getByText("0 answered · 3 remaining")).toBeInTheDocument();
@@ -478,7 +488,7 @@ describe("accessibility scaffolding", () => {
 
     await openSubmitDialog(user);
     await user.click(screen.getByRole("button", { name: /submit anyway/i }));
-    expect(screen.getByRole("heading", { level: 1 })).toHaveAccessibleName(/your score/i);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveAccessibleName(/quiz complete/i);
   });
 
   it("groups every choice under the question text", async () => {
@@ -600,7 +610,7 @@ describe("variable distractor counts", () => {
     await user.click(within(dialog).getByRole("button", { name: /submit quiz/i }));
 
     expect(screen.getByText("3 out of 3 correct")).toBeInTheDocument();
-    expect(screen.getByText("100%")).toBeInTheDocument();
+    expect(screen.getAllByText("100%").length).toBeGreaterThan(0);
     expect(reviewItems("correct")).toHaveLength(3);
 
     // Each review card lists that question's own choices, and marks one as correct.
@@ -620,7 +630,7 @@ describe("variable distractor counts", () => {
     await user.click(screen.getByRole("button", { name: /submit anyway/i }));
     expect(screen.getByText("0 out of 2 correct")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /take again \(reshuffle\)/i }));
+    await user.click(screen.getByRole("button", { name: /take it again/i }));
 
     for (let step = 0; step < mixed.length; step++) {
       const prompt = currentQuestionText();
@@ -640,9 +650,9 @@ describe("variable distractor counts", () => {
   it("reports a uniform quiz's structure on the upload screen", async () => {
     await upload(quizFile([question(3, "a"), question(3, "b")]));
 
-    expect(await screen.findByText("2 questions")).toBeInTheDocument();
-    expect(screen.getByText("3 distractors per question")).toBeInTheDocument();
-    expect(screen.getByText("4 total choices per question")).toBeInTheDocument();
+    await screen.findByText("Ready to begin");
+    expect(stat("Questions")).toHaveTextContent(/^2$/);
+    expect(stat("Answer choices")).toHaveTextContent("4 per question");
   });
 
   it("reports a mixed quiz's structure as a range", async () => {
@@ -650,9 +660,9 @@ describe("variable distractor counts", () => {
       quizFile([question(2, "a"), question(3, "b"), question(4, "c"), question(5, "d")]),
     );
 
-    expect(await screen.findByText("4 questions")).toBeInTheDocument();
-    expect(screen.getByText("2–5 distractors per question")).toBeInTheDocument();
-    expect(screen.getByText("3–6 total choices")).toBeInTheDocument();
+    await screen.findByText("Ready to begin");
+    expect(stat("Questions")).toHaveTextContent(/^4$/);
+    expect(stat("Answer choices")).toHaveTextContent("3–6 per question");
   });
 
   it("rejects a question with too few distractors, naming the question", async () => {
@@ -724,13 +734,102 @@ describe("redesigned screens", () => {
     expect(screen.queryByText("Correct answer")).not.toBeInTheDocument();
   });
 
-  it("moves focus to the review when Review answers is pressed", async () => {
+  it("moves focus to the review, filtered to what was missed, when Review missed questions is pressed", async () => {
     const user = await startQuiz();
     await openSubmitDialog(user);
     await user.click(screen.getByRole("button", { name: /submit anyway/i }));
 
-    await user.click(screen.getByRole("button", { name: /review answers/i }));
+    await user.click(screen.getByRole("button", { name: /review missed questions/i }));
 
-    expect(screen.getByRole("heading", { name: "Review" })).toHaveFocus();
+    // Nothing was answered, so "missed" means the unanswered questions.
+    const heading = screen.getByRole("heading", { name: /review unanswered questions/i });
+    expect(heading).toHaveFocus();
+    expect(reviewItems()).toHaveLength(3);
+    expect(reviewItems("unanswered")).toHaveLength(3);
+  });
+
+  it("offers Review answers instead when nothing was missed", async () => {
+    const user = await answerEveryQuestion(await startQuiz());
+    const dialog = await openSubmitDialog(user);
+    await user.click(within(dialog).getByRole("button", { name: /submit quiz/i }));
+
+    expect(screen.queryByRole("button", { name: /review missed questions/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /review answers/i }));
+    expect(screen.getByRole("heading", { name: /review every question/i })).toHaveFocus();
+  });
+});
+
+describe("setup screen options", () => {
+  it("defaults to a randomized, full-length quiz and reports it", async () => {
+    await upload(quizFile(QUIZ));
+    await screen.findByText("Ready to begin");
+
+    expect(screen.getByRole("switch", { name: /shuffle question order/i })).toBeChecked();
+    expect(stat("Order")).toHaveTextContent("Randomized");
+    // Three questions is below every length preset, so there is nothing to choose.
+    expect(screen.queryByRole("combobox", { name: /number of questions/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/distractor/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps the file order when shuffling is switched off", async () => {
+    const user = await upload(quizFile(QUIZ));
+    await user.click(await screen.findByRole("switch", { name: /shuffle question order/i }));
+    expect(stat("Order")).toHaveTextContent("As written");
+
+    await user.click(screen.getByRole("button", { name: /start quiz/i }));
+
+    for (let step = 0; step < QUIZ.length; step++) {
+      expect(currentQuestionText()).toBe(QUIZ[step]!.question);
+      if (step < QUIZ.length - 1) await user.click(screen.getByRole("button", { name: /next/i }));
+    }
+  });
+
+  it("offers shorter lengths for a long file and builds a quiz of that length", async () => {
+    const long = Array.from({ length: 12 }, (_, index) => ({
+      question: `Long question ${index + 1}?`,
+      answer: "right",
+      distractors: ["wrong 1", "wrong 2", "wrong 3"],
+    }));
+    const user = await upload(quizFile(long, "long.json"));
+    const length = await screen.findByRole("combobox", { name: /number of questions/i });
+
+    expect(within(length).getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "All (12)",
+      "5",
+      "10",
+    ]);
+
+    await user.selectOptions(length, "5");
+    expect(stat("Questions")).toHaveTextContent("5 of 12");
+
+    await user.click(screen.getByRole("button", { name: /start quiz/i }));
+    expect(screen.getByText("Question 1 of 5")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuemax", "5");
+
+    // "Take it again" keeps the same length.
+    await openSubmitDialog(user);
+    await user.click(screen.getByRole("button", { name: /submit anyway/i }));
+    expect(screen.getByText("0 out of 5 correct")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /take it again/i }));
+    expect(screen.getByText("Question 1 of 5")).toBeInTheDocument();
+  });
+
+  it("shows one progress segment per question and marks the answered ones", async () => {
+    const user = await startQuiz();
+    const bar = screen.getByRole("progressbar");
+    expect(bar.querySelectorAll(".progress__segment")).toHaveLength(3);
+    expect(bar.querySelectorAll(".progress__segment--done")).toHaveLength(0);
+
+    await user.click(correctRadio());
+    expect(bar.querySelectorAll(".progress__segment--done")).toHaveLength(1);
+  });
+
+  it("drops the Format guide link from the header while the setup screen is showing", async () => {
+    const user = await upload(quizFile(QUIZ));
+    await screen.findByText("Ready to begin");
+    expect(screen.queryByRole("link", { name: /format guide/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /choose a different file/i }));
+    expect(screen.getByRole("link", { name: /format guide/i })).toBeInTheDocument();
   });
 });

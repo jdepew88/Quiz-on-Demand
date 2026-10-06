@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { IconCheck, IconMinus, IconRefresh, IconX } from "./Icons";
+import { IconCheck, IconMinus, IconRefresh, IconTrophy, IconX } from "./Icons";
 import { formatPercent } from "../lib/attempt";
 import { choiceLabel } from "../lib/choices";
 import type { QuizResult, ReviewEntry, ReviewOutcome } from "../lib/types";
@@ -9,11 +9,15 @@ type Filter = "all" | "incorrect" | "unanswered";
 /** Every outcome carries a word and an icon, never colour alone. */
 const OUTCOME: Record<ReviewOutcome, { label: string; Icon: typeof IconCheck }> = {
   correct: { label: "Correct", Icon: IconCheck },
-  incorrect: { label: "Incorrect", Icon: IconX },
+  incorrect: { label: "Missed", Icon: IconX },
   unanswered: { label: "Unanswered", Icon: IconMinus },
 };
 
-const OUTCOME_ORDER: ReviewOutcome[] = ["correct", "incorrect", "unanswered"];
+const REVIEW_TITLE: Record<Filter, string> = {
+  all: "Review every question",
+  incorrect: "Review missed questions",
+  unanswered: "Review unanswered questions",
+};
 
 export function ResultsScreen({
   result,
@@ -36,7 +40,15 @@ export function ResultsScreen({
     return result.entries.filter((entry) => entry.outcome === filter);
   }, [filter, result.entries]);
 
-  function goToReview() {
+  // "Missed" for the primary action means anything that did not score: wrong answers
+  // first, and skipped questions if there were no wrong ones. A perfect run has nothing to
+  // review in that sense, so the button falls back to the full list.
+  const missedFilter: Filter =
+    result.incorrect > 0 ? "incorrect" : result.unanswered > 0 ? "unanswered" : "all";
+  const hasMissed = missedFilter !== "all";
+
+  function goToReview(nextFilter: Filter) {
+    setFilter(nextFilter);
     const heading = reviewHeadingRef.current;
     if (!heading) return;
     const reduceMotion =
@@ -48,16 +60,20 @@ export function ResultsScreen({
 
   const filters: [Filter, string, number][] = [
     ["all", "All", result.total],
-    ["incorrect", "Incorrect", result.incorrect],
+    ["incorrect", "Missed", result.incorrect],
     ["unanswered", "Unanswered", result.unanswered],
   ];
 
   return (
     <div className="container container--reading results">
       <section className="score" aria-labelledby="score-heading">
-        <h1 id="score-heading" className="score__eyebrow">
-          Your score
+        <span className="score__badge" aria-hidden="true">
+          <IconTrophy size={28} />
+        </span>
+        <h1 id="score-heading" className="score__title">
+          Quiz complete!
         </h1>
+        <p className="score__eyebrow">Your score</p>
 
         <p className="score__raw">
           <span className="score__visual" aria-hidden="true">
@@ -70,27 +86,23 @@ export function ResultsScreen({
         </p>
         <p className="score__percent">{formatPercent(result.percent)}</p>
 
-        {result.total > 0 && (
-          <div className="score-bar" aria-hidden="true">
-            {OUTCOME_ORDER.map((key) =>
-              result[key] > 0 ? (
-                <span
-                  key={key}
-                  className={`score-bar__segment score-bar__segment--${key}`}
-                  style={{ flexGrow: result[key] }}
-                />
-              ) : null,
-            )}
+        <dl className="result-cards">
+          <div className="result-card result-card--correct">
+            <dt>Correct</dt>
+            <dd>{result.correct}</dd>
           </div>
-        )}
-
-        <dl className="tally">
-          {OUTCOME_ORDER.map((key) => (
-            <div key={key} className={`tally__item tally__item--${key}`}>
-              <dt>{OUTCOME[key].label}</dt>
-              <dd>{result[key]}</dd>
-            </div>
-          ))}
+          <div className="result-card result-card--incorrect">
+            <dt>Missed</dt>
+            <dd>{result.incorrect}</dd>
+          </div>
+          <div className="result-card result-card--unanswered">
+            <dt>Unanswered</dt>
+            <dd>{result.unanswered}</dd>
+          </div>
+          <div className="result-card result-card--accuracy">
+            <dt>Accuracy</dt>
+            <dd>{formatPercent(result.percent)}</dd>
+          </div>
         </dl>
 
         <p className="score__meta">
@@ -98,11 +110,15 @@ export function ResultsScreen({
         </p>
 
         <div className="score__actions">
-          <button type="button" className="btn btn--primary btn--lg" onClick={goToReview}>
-            Review answers
+          <button
+            type="button"
+            className="btn btn--primary btn--lg"
+            onClick={() => goToReview(missedFilter)}
+          >
+            {hasMissed ? "Review missed questions" : "Review answers"}
           </button>
           <button type="button" className="btn btn--secondary btn--lg" onClick={onRetake}>
-            <IconRefresh size={18} /> Take again (reshuffle)
+            <IconRefresh size={18} /> Take it again
           </button>
           <button type="button" className="btn btn--quiet btn--lg" onClick={onNewQuiz}>
             New quiz
@@ -114,10 +130,10 @@ export function ResultsScreen({
         <div className="review__header">
           <div>
             <h2 id="review-heading" className="section-title" ref={reviewHeadingRef} tabIndex={-1}>
-              Review
+              {REVIEW_TITLE[filter]}
             </h2>
             <p className="review__intro">
-              Every question in the order you saw it. Taking the quiz again reshuffles.
+              In the order you saw them. Taking the quiz again reshuffles.
             </p>
           </div>
 
@@ -143,8 +159,13 @@ export function ResultsScreen({
           </p>
         ) : (
           <ul className="review-list">
-            {visible.map((entry) => (
-              <ReviewCard key={entry.questionId} entry={entry} />
+            {visible.map((entry, position) => (
+              <ReviewCard
+                key={entry.questionId}
+                entry={entry}
+                position={position + 1}
+                count={visible.length}
+              />
             ))}
           </ul>
         )}
@@ -153,7 +174,15 @@ export function ResultsScreen({
   );
 }
 
-function ReviewCard({ entry }: { entry: ReviewEntry }) {
+function ReviewCard({
+  entry,
+  position,
+  count,
+}: {
+  entry: ReviewEntry;
+  position: number;
+  count: number;
+}) {
   const { label, Icon } = OUTCOME[entry.outcome];
 
   return (
@@ -162,7 +191,12 @@ function ReviewCard({ entry }: { entry: ReviewEntry }) {
         <span className="outcome">
           <Icon size={16} /> {label}
         </span>
-        <span className="review-item__number">Question {entry.displayNumber}</span>
+        <span className="review-item__where">
+          <span className="review-item__number">Question {entry.displayNumber}</span>
+          <span className="review-item__position">
+            {position} of {count}
+          </span>
+        </span>
       </div>
 
       <p className="review-item__prompt">{entry.prompt}</p>

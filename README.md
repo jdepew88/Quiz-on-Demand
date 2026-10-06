@@ -28,21 +28,26 @@ quiz, onboarding material at work, or twenty questions you wrote yourself five m
 
 ## 1. What it does
 
+The flow is: **upload quiz → setup → choose question count → optional question-order
+shuffle → take quiz → results → review missed / unanswered answers.**
+
 | Screen | What you get |
 | --- | --- |
-| **Upload** | A short hero, then one prominent drop zone (drag and drop, the file picker, or tap anywhere on it on a phone), the sample quiz, and a template download. A valid file becomes a *Ready to begin* card with a title taken from the file name, the question count, and its answer-choice shape; an invalid one gets a readable list of every problem, by question number. The format guide sits below, out of the way until you need it. |
-| **Quiz** | One question at a time, set as the centre of the page, with large lettered answer cards (A–F), a slim sticky progress bar with answered/remaining counts, quieter Previous / Next, a jump-to-any-question grid, and Submit. Answers can be changed until you submit. |
+| **Upload** | The hero ("Any quiz. Any subject."), one prominent drop zone (drag and drop, the file picker, or tap anywhere on it on a phone), a preview of the quiz interface, and three ways to start: *Upload a quiz*, *Try a sample quiz*, and *Make your own* (which jumps to the format guide and its template download). An invalid file gets a readable list of every problem, by question number, below the drop zone. |
+| **Setup** | Shown once a file validates, in place of the landing page: a title taken from the file name, the file name, and three facts — question count, answer choices per question (a single number or a range such as 3–6), and the question order. Two options: **Shuffle question order** (on by default) and **Number of questions** (every question, or a shorter preset such as 5 / 10 / 20 when the file is longer than that — a shorter quiz is a random sample). Then *Start quiz* or *Choose a different file*. |
+| **Quiz** | One question at a time, with large lettered answer rows (A–F), a sticky bar showing *7 / 20*, answered / remaining counts, and one progress segment per question (a continuous bar above 40 questions), *Previous* / *Next question*, a jump-to-any-question grid, and *Submit quiz*. Answers can be changed until you submit. |
 | **Confirm** | If anything is unanswered, it tells you how many and lets you go back or submit anyway. |
-| **Results** | The score first — e.g. **26 / 30 — 87%** — with correct, incorrect, and unanswered counts, then *Review answers*, *Take again (reshuffle)*, and *New quiz*. |
-| **Review** | Every question with your answer, the correct answer, and a clear correct / incorrect / unanswered marker. Filterable to just the ones you missed or skipped. |
-| **Restart** | *Take again (reshuffle)* for a brand new order of the same questions, or *New quiz* to start over. |
+| **Results** | *Quiz complete!* with the score — e.g. **26 / 30** and **87%** — and four result cards: **Correct**, **Missed** (answered wrongly), **Unanswered**, and **Accuracy**. Then *Review missed questions* (or *Review answers* after a perfect run), *Take it again*, and *New quiz*. |
+| **Review** | Every question in the order you saw it, with your answer and the correct answer marked in words and icons (never colour alone), the explanation when the file has one, and each card's position within the current filter. *Review missed questions* opens the list pre-filtered to wrong answers (or to unanswered questions if none were wrong); the filter can be switched between All / Missed / Unanswered. |
+| **Restart** | *Take it again* builds a brand new attempt from the same questions with the same setup options (so a 10-question sample stays 10 questions), or *New quiz* starts over from upload. |
 
 Every question has **one correct answer and 2–5 distractors**, so it shows 3–6 total
 choices. Three distractors (four choices) is the recommended default, and questions in one
 quiz may use different counts.
 
-**Light and dark themes.** A soft, warm "paper" light theme and a quiet warm-charcoal "ink"
-dark theme, built from one set of design tokens. The app follows your operating-system setting
+**Light and dark themes.** A warm cream "paper" light theme with deep green as the action
+colour, mint for soft states and a small gold accent, and a deep green-black "moss" dark theme
+with the same roles, built from one set of design tokens. The app follows your operating-system setting
 until you choose Light, Dark, or Match system in the header. An explicit choice is remembered
 on this device only (`localStorage`, never sent anywhere) and applied before first paint, so
 there is no flash of the wrong theme.
@@ -177,24 +182,11 @@ On the upload page:
 - **Download template JSON** → a file to fill in, leading with the recommended 3-distractor
   shape and then showing a 2- and a 5-distractor question
 - **Download sample quiz** → a working 20-question general-knowledge quiz that mixes counts
-- **Try the sample quiz** → loads that sample straight into the app
+- **Try a sample quiz** → loads that sample straight into the setup screen
 
-Once a file validates, the upload screen reports its answer-choice structure. A uniform
-quiz reads:
-
-```text
-50 questions
-3 distractors per question
-4 total choices per question
-```
-
-and a mixed one reads:
-
-```text
-50 questions
-2–5 distractors per question
-3–6 total choices
-```
+Once a file validates, the setup screen reports its shape without any JSON terminology: the
+question count, and **Answer choices** as either a single value (`4 per question`) for a
+uniform quiz or a range (`3–6 per question`) for a mixed one.
 
 ---
 
@@ -298,11 +290,23 @@ question id, never against a position:
 - `correctChoiceId` is resolved after the shuffle by finding where the correct text actually
   landed.
 
+### Setup options
+
+`buildAttempt` takes an optional `AttemptOptions` object, which the setup screen fills in:
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `shuffleQuestions` | `true` | `false` keeps the file's question order. Answer choices are shuffled either way — the file stores the answer separately from the distractors, so an "unshuffled" choice order would put the correct answer first every time. |
+| `limit` | every question | Keeps only the first *n* questions of the (shuffled) order, so a shorter quiz is a random sample of the file. Ignored unless it is a positive integer smaller than the file. |
+
+The options are kept for the session, so **Take it again** rebuilds the same kind of attempt
+with a new order.
+
 The original question number from your file is kept internally for integrity checks only —
 it is never rendered, so the quiz does not reveal which question you are on in the source
 file. Review numbering reflects the order you actually saw.
 
-**Take again (reshuffle)** builds a brand new attempt from the same untouched source, with a
+**Take it again** builds a brand new attempt from the same untouched source, with a
 new order, new choice positions, and new ids — which also means a stale selection from the
 previous attempt can never be scored against the new one. **New quiz** clears
 everything.
@@ -324,12 +328,13 @@ This is a property of the architecture, not a policy promise:
   and no quiz content in `localStorage`. Closing the tab ends the session and the quiz is
   gone. The only thing kept on the device is your light/dark theme choice, if you make one.
 - The single network request the app makes on its own is fetching `/sample-quiz.json` — its
-  own static sample file — when you click *Try the sample quiz*.
+  own static sample file — when you click *Try a sample quiz*.
 - The browser enforces this as well: the Content-Security-Policy's `connect-src 'self'`
   (see [Security headers](#security-headers)) forbids the page from sending requests to any
   other origin, so even a future bug could not post a quiz somewhere else.
 
-The statement above is shown in the UI on both the upload and results screens.
+The statement above is shown beside the upload control, and the footer repeats it on every
+screen.
 
 ---
 
@@ -502,15 +507,13 @@ document CSP. Leave CORS closed unless a cross-origin caller genuinely needs it.
 If you would rather use Pages, `dist/` is a plain static directory and
 `npx wrangler pages deploy dist` will publish it as-is.
 
-Nothing has been deployed and no GitHub repository has been created — both are left to you.
-
 ---
 
 ## 9. Where the sample JSON lives
 
 | File | Purpose |
 | --- | --- |
-| [`public/sample-quiz.json`](public/sample-quiz.json) | A working 20-question general-knowledge quiz. Mostly 3 distractors, with 2-, 4-, and 5-distractor questions mixed in so the range is visible. Served at `/sample-quiz.json`, linked from the upload page, and loaded by *Try the sample quiz*. |
+| [`public/sample-quiz.json`](public/sample-quiz.json) | A working 20-question general-knowledge quiz. Mostly 3 distractors, with 2-, 4-, and 5-distractor questions mixed in so the range is visible. Served at `/sample-quiz.json`, linked from the format guide, and loaded by *Try a sample quiz*. |
 | [`public/quiz-template.json`](public/quiz-template.json) | A template to fill in. Leads with the recommended 3-distractor shape, then shows a 2- and a 5-distractor question. Served at `/quiz-template.json`. |
 
 Both are checked by the test suite against the app's own validator, so a broken template
@@ -553,11 +556,13 @@ quiz-on-demand/
    │  ├─ display.test.ts
    │  └─ attempt.test.ts
    ├─ components/
-   │  ├─ UploadScreen.tsx        # Drop zone, file picker, validation results
+   │  ├─ UploadScreen.tsx        # Landing: hero, drop zone, start cards, validation results
+   │  ├─ HeroVisual.tsx          # Stacked quiz-card preview and feature chips on the landing page
+   │  ├─ SetupScreen.tsx         # File summary, shuffle / length options, Start quiz
    │  ├─ FormatGuide.tsx         # On-page schema docs, example, downloads
    │  ├─ QuizScreen.tsx          # Question, choices, navigation, navigator
    │  ├─ ConfirmSubmitDialog.tsx # Unanswered warning
-   │  ├─ ResultsScreen.tsx       # Score, stats, review list, restart
+   │  ├─ ResultsScreen.tsx       # Score, result cards, filtered review list, restart
    │  ├─ SiteHeader.tsx          # Wordmark, guide link, theme control
    │  ├─ ThemeToggle.tsx         # Light / Match system / Dark
    │  ├─ Icons.tsx               # Inline SVG icons and the logo mark
@@ -579,7 +584,7 @@ quiz-on-demand/
 npm test
 ```
 
-242 tests across 10 files, covering:
+258 tests across 10 files, covering:
 
 - **Validation** — valid files, malformed JSON, a non-array root, an empty quiz, missing
   fields, wrong types, blank values, the answer duplicated among distractors, duplicate
@@ -599,8 +604,10 @@ npm test
   `correctChoiceId` tracking through both shuffles, ids that do not leak the answer, perfect
   and zero scores, the 42/50 = 84% worked example, unanswered questions counted separately
   from incorrect ones, scoring independent of display position, stale selections from a
-  previous attempt ignored, reshuffle correctness across repeated attempts, and percentage
-  rounding.
+  previous attempt ignored, reshuffle correctness across repeated attempts, percentage
+  rounding, and the setup options — file order kept when question shuffling is off (choices
+  still shuffled), a length limit producing that many distinct questions, and out-of-range
+  limits ignored.
 - **Variable counts through the engine** — each supported count rendering the right number
   of choices, no truncation and no padding, choices only ever drawn from the question's own
   answer and distractors, a mixed-count quiz keeping each question's own shape, exactly one
@@ -615,7 +622,14 @@ npm test
   quiz giving each question its own count, scoring and reviewing a mixed quiz, reshuffling
   one, the upload screen reporting a uniform count and a range, out-of-range questions
   rejected by question number, a two-distractor question now accepted where the old
-  exactly-three rule refused it, and the on-page terminology. For the redesign: the landing screen's reading order, returning from *Ready to begin* to the drop area, answer choices styled identically before submission (so the answer cannot be spotted), and *Review answers* moving focus to the review.
+  exactly-three rule refused it, and the on-page terminology. For the redesign: the landing
+  screen's reading order, returning from the setup screen to the drop area, answer choices
+  styled identically before submission (so the answer cannot be spotted), *Review missed
+  questions* moving focus to a review pre-filtered to what was missed (and *Review answers*
+  taking its place after a perfect run), the setup screen's defaults, the shuffle switch
+  keeping file order, the length presets building a quiz of that length that *Take it again*
+  preserves, one progress segment per question, and the header's guide link hidden during
+  setup.
 - **Theme** (`src/test/theme.test.tsx`) — follows the OS until you choose; Light, Dark, and
   Match system switch and are remembered locally; a stored choice is restored on the next
   visit; blocked storage never breaks the toggle; nothing is sent over the network; the
@@ -632,7 +646,7 @@ npm test
   the CSP starts from `default-src 'none'`, allows only `'self'` for scripts, styles, images
   and connections, denies framing, `<base>`, and form submission, and contains no
   `'unsafe-inline'`, `'unsafe-eval'`, wildcard, or scheme source; Permissions-Policy denies
-  every listed feature; HSTS is absent by decision; and `index.html` has no inline script,
+  every listed feature; HSTS is `max-age` only; and `index.html` has no inline script,
   inline style, or inline event handler that the policy would block.
 - **Shipped fixtures** — `public/sample-quiz.json`, `public/quiz-template.json`, and the
   example printed on the upload page all validate and produce a playable, gradeable attempt

@@ -3,7 +3,7 @@ import { QuizScreen } from "./components/QuizScreen";
 import { ResultsScreen } from "./components/ResultsScreen";
 import { SiteHeader } from "./components/SiteHeader";
 import { UploadScreen } from "./components/UploadScreen";
-import { buildAttempt, gradeAttempt } from "./lib/attempt";
+import { buildAttempt, gradeAttempt, type AttemptOptions } from "./lib/attempt";
 import type { QuizAttempt, QuizResult, Selections, SourceQuestion } from "./lib/types";
 
 /**
@@ -18,6 +18,8 @@ import type { QuizAttempt, QuizResult, Selections, SourceQuestion } from "./lib/
 interface SessionState {
   source: SourceQuestion[];
   sourceName: string;
+  /** The setup-screen choices, kept so "Take it again" rebuilds the same kind of attempt. */
+  options: AttemptOptions;
   attempt: QuizAttempt;
   selections: Selections;
   result: QuizResult | null;
@@ -25,16 +27,23 @@ interface SessionState {
 
 export function App() {
   const [session, setSession] = useState<SessionState | null>(null);
+  // The upload screen owns the loaded file; it only reports whether it is showing the
+  // setup state, so the header can drop the "Format guide" link while the guide is hidden.
+  const [setupOpen, setSetupOpen] = useState(false);
 
-  const startQuiz = useCallback((questions: SourceQuestion[], sourceName: string) => {
-    setSession({
-      source: questions,
-      sourceName,
-      attempt: buildAttempt(questions, 1),
-      selections: {},
-      result: null,
-    });
-  }, []);
+  const startQuiz = useCallback(
+    (questions: SourceQuestion[], sourceName: string, options: AttemptOptions) => {
+      setSession({
+        source: questions,
+        sourceName,
+        options,
+        attempt: buildAttempt(questions, 1, Math.random, options),
+        selections: {},
+        result: null,
+      });
+    },
+    [],
+  );
 
   const selectChoice = useCallback((questionId: string, choiceId: string) => {
     setSession((current) =>
@@ -52,14 +61,19 @@ export function App() {
     );
   }, []);
 
-  /** Same source questions, brand new randomized order and fresh choice order. */
+  /** Same source questions and options, brand new randomized order and fresh choice order. */
   const retake = useCallback(() => {
     setSession((current) =>
       current === null
         ? current
         : {
             ...current,
-            attempt: buildAttempt(current.source, current.attempt.attemptNumber + 1),
+            attempt: buildAttempt(
+              current.source,
+              current.attempt.attemptNumber + 1,
+              Math.random,
+              current.options,
+            ),
             selections: {},
             result: null,
           },
@@ -98,11 +112,11 @@ export function App() {
         Skip to main content
       </a>
 
-      <SiteHeader showGuideLink={phase === "upload"} />
+      <SiteHeader showGuideLink={phase === "upload" && !setupOpen} />
 
       <main className="site-main" id="main" ref={mainRef} tabIndex={-1}>
         {session === null ? (
-          <UploadScreen onStart={startQuiz} />
+          <UploadScreen onStart={startQuiz} onSetupChange={setSetupOpen} />
         ) : session.result ? (
           <ResultsScreen
             result={session.result}
@@ -128,7 +142,7 @@ export function App() {
 
       <footer className="site-footer">
         <div className="container site-footer__inner">
-          <span>Quiz on Demand</span>
+          <span className="site-footer__brand">Quiz on Demand</span>
           <span>Runs entirely in your browser. Your quiz is never uploaded.</span>
         </div>
       </footer>

@@ -21,7 +21,7 @@ export type ThemePreference = "light" | "dark" | "system";
 export const THEME_STORAGE_KEY = "quiz-on-demand:theme";
 
 /** Browser-chrome colours (mobile address bar), matched to --color-bg in index.css. */
-export const THEME_COLORS = { light: "#f6f2ea", dark: "#1b1a18" } as const;
+export const THEME_COLORS = { light: "#f8f4ec", dark: "#0f1714" } as const;
 
 export function readThemePreference(): ThemePreference {
   try {

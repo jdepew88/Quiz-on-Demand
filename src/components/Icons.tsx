@@ -126,7 +126,43 @@ export const IconMonitor = (props: IconProps) => (
   </Svg>
 );
 
-/** The Quiz on Demand mark: a "Q" on a teal tile, with a marigold spark. */
+export const IconShuffle = (props: IconProps) => (
+  <Svg {...props}>
+    <path d="M3 5.5h2.4c1.4 0 2.4.6 3.2 1.8l2.8 4.4c.8 1.2 1.8 1.8 3.2 1.8H17" />
+    <path d="M3 14.5h2.4c1.4 0 2.4-.6 3.2-1.8M11.4 7.3c.8-1.2 1.8-1.8 3.2-1.8H17" />
+    <path d="M15 3.5l2 2-2 2M15 11.5l2 2-2 2" />
+  </Svg>
+);
+
+export const IconTrophy = (props: IconProps) => (
+  <Svg {...props}>
+    <path d="M6 3.25h8v4.5a4 4 0 0 1-8 0z" />
+    <path d="M6 4.75H3.9a.4.4 0 0 0-.4.4c0 2.1 1.3 3.5 3 3.75M14 4.75h2.1a.4.4 0 0 1 .4.4c0 2.1-1.3 3.5-3 3.75" />
+    <path d="M10 11.75v2.5M7.25 16.75h5.5M8.5 14.25h3" />
+  </Svg>
+);
+
+export const IconPencil = (props: IconProps) => (
+  <Svg {...props}>
+    <path d="M13.2 3.6l3.2 3.2L7.2 16H4v-3.2z" />
+    <path d="M11.4 5.4l3.2 3.2" />
+  </Svg>
+);
+
+export const IconPlay = (props: IconProps) => (
+  <Svg {...props}>
+    <path d="M6.75 4.25v11.5l9-5.75z" />
+  </Svg>
+);
+
+export const IconBook = (props: IconProps) => (
+  <Svg {...props}>
+    <path d="M3.25 4.25h5.25a1.5 1.5 0 0 1 1.5 1.5v10.5a1.25 1.25 0 0 0-1.25-1.25h-5.5z" />
+    <path d="M16.75 4.25H11.5a1.5 1.5 0 0 0-1.5 1.5v10.5a1.25 1.25 0 0 1 1.25-1.25h5.5z" />
+  </Svg>
+);
+
+/** The Quiz on Demand mark: a "Q" on a deep green tile, with a gold spark. */
 export function LogoMark() {
   return (
     <svg className="logo-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">

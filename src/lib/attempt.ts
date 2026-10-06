@@ -19,9 +19,31 @@ import type {
  */
 
 /**
+ * Setup-screen choices that shape an attempt. Every field is optional and the defaults are
+ * the app's original behaviour: every question, in a fresh random order.
+ */
+export interface AttemptOptions {
+  /** `false` keeps the file's question order. Default `true`. */
+  shuffleQuestions?: boolean;
+  /**
+   * Keep only this many questions (taken from the front of the shuffled order, so a short
+   * attempt is a random sample). Ignored unless it is a positive integer smaller than the
+   * source length.
+   */
+  limit?: number;
+}
+
+/** True when `limit` is a real, shortening limit for a quiz of `total` questions. */
+export function isQuestionLimit(limit: number | undefined, total: number): limit is number {
+  return limit !== undefined && Number.isInteger(limit) && limit > 0 && limit < total;
+}
+
+/**
  * Build one randomized attempt from the uploaded source questions.
  *
- * Two independent shuffles happen here:
+ * Two independent shuffles happen here (the first can be switched off via `options`; the
+ * second cannot — the file format stores the answer separately from the distractors, so an
+ * "unshuffled" choice order would put the correct answer first every time):
  *
  *  1. **Question order** (the primary requirement). The attempt's questions are a
  *     Fisher-Yates permutation of the source array.
@@ -42,11 +64,13 @@ export function buildAttempt(
   source: readonly SourceQuestion[],
   attemptNumber: number,
   rng: RandomSource = Math.random,
+  options: AttemptOptions = {},
 ): QuizAttempt {
-  const order = shuffle(
-    source.map((question, sourceIndex) => ({ question, sourceIndex })),
-    rng,
-  );
+  const indexed = source.map((question, sourceIndex) => ({ question, sourceIndex }));
+  const ordered = options.shuffleQuestions === false ? indexed : shuffle(indexed, rng);
+  const order = isQuestionLimit(options.limit, source.length)
+    ? ordered.slice(0, options.limit)
+    : ordered;
 
   const questions: AttemptQuestion[] = order.map(({ question, sourceIndex }, position) => {
     const id = `a${attemptNumber}-q${position}`;
