@@ -1,9 +1,11 @@
 import { gsap } from "gsap";
 import { useMemo, useRef, useState } from "react";
-import { IconCheck, IconMinus, IconRefresh, IconTrophy, IconX } from "./Icons";
+import { IconCheck, IconClock, IconMinus, IconRefresh, IconTrophy, IconX } from "./Icons";
 import { formatPercent, isPerfectScore } from "../lib/attempt";
 import { choiceLabel } from "../lib/choices";
+import { formatClock, formatDuration } from "../lib/formatTime";
 import { EASE_OUT, prefersReducedMotion, useGsapContext } from "../lib/motion";
+import { summarizeTiming, type QuizTiming, type SubmissionKind } from "../lib/timing";
 import type { QuizResult, ReviewEntry, ReviewOutcome } from "../lib/types";
 
 type Filter = "all" | "incorrect" | "unanswered";
@@ -46,16 +48,31 @@ export function ResultsScreen({
   result,
   sourceName,
   attemptNumber,
+  timing,
+  submission,
   onRetake,
   onNewQuiz,
 }: {
   result: QuizResult;
   sourceName: string;
   attemptNumber: number;
+  timing: QuizTiming;
+  submission: SubmissionKind;
   onRetake: () => void;
   onNewQuiz: () => void;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
+  // The clock is frozen on submission, so every figure is fixed; `completedAt` doubles
+  // as the "now" the model expects (it never consults it once complete).
+  const summary = useMemo(
+    () =>
+      summarizeTiming(
+        timing,
+        result.entries.map((entry) => entry.questionId),
+        timing.completedAt ?? timing.startedAt,
+      ),
+    [timing, result.entries],
+  );
   const reviewHeadingRef = useRef<HTMLHeadingElement>(null);
   const scoreRef = useRef<HTMLElement>(null);
   const percentRef = useRef<HTMLSpanElement>(null);
@@ -139,7 +156,7 @@ export function ResultsScreen({
 
       tl.from(".result-card", { y: 10, opacity: 0, duration: 0.35, stagger: 0.05, ...settle }, cardsAt);
       tl.from(
-        [".score__meta", ".score__actions"],
+        [".timing-cards", ".timing-facts", ".score__meta", ".score__actions"],
         { y: 6, opacity: 0, duration: 0.3, stagger: 0.05, ...settle },
         cardsAt + 0.15,
       );
@@ -178,6 +195,18 @@ export function ResultsScreen({
 
   return (
     <div className="container container--reading results">
+      {submission === "timeout" && (
+        <div className="notice notice--timeout" role="status">
+          <span className="notice__icon" aria-hidden="true">
+            <IconClock size={20} />
+          </span>
+          <div>
+            <p className="notice__title">Time’s up</p>
+            <p className="notice__text">Your answers were submitted automatically.</p>
+          </div>
+        </div>
+      )}
+
       <section
         className={`score${perfect ? " score--perfect" : ""}`}
         aria-labelledby="score-heading"
@@ -237,6 +266,52 @@ export function ResultsScreen({
             <dd>{formatPercent(result.percent)}</dd>
           </div>
         </dl>
+
+        <dl className="timing-cards" aria-label="Timing">
+          <div className="timing-card">
+            <dt>Total time</dt>
+            <dd>{formatClock(summary.totalMs)}</dd>
+          </div>
+          <div className="timing-card">
+            <dt>Average per question</dt>
+            <dd>{formatClock(summary.averageMs)}</dd>
+          </div>
+          {summary.timeLimitMs !== null && (
+            <div className="timing-card">
+              <dt>Time limit</dt>
+              <dd>{formatClock(summary.timeLimitMs)}</dd>
+            </div>
+          )}
+          {summary.remainingMs !== null && (
+            <div className="timing-card">
+              <dt>Time remaining</dt>
+              <dd>{formatClock(summary.remainingMs, "remaining")}</dd>
+            </div>
+          )}
+        </dl>
+
+        {summary.fastest && summary.longest && (
+          <ul className="timing-facts" aria-label="Timing summary">
+            <li>
+              <span className="timing-facts__label">Fastest</span>
+              <span className="timing-facts__value">
+                Question {summary.fastest.displayNumber} — {formatDuration(summary.fastest.ms)}
+              </span>
+            </li>
+            <li>
+              <span className="timing-facts__label">Longest</span>
+              <span className="timing-facts__value">
+                Question {summary.longest.displayNumber} — {formatDuration(summary.longest.ms)}
+              </span>
+            </li>
+            <li>
+              <span className="timing-facts__label">Average</span>
+              <span className="timing-facts__value">
+                {formatDuration(summary.averageMs)} / question
+              </span>
+            </li>
+          </ul>
+        )}
 
         <p className="score__meta">
           {sourceName} · Attempt {attemptNumber}
@@ -298,6 +373,7 @@ export function ResultsScreen({
                 entry={entry}
                 position={position + 1}
                 count={visible.length}
+                timeMs={summary.perQuestionMs[entry.questionId] ?? 0}
               />
             ))}
           </ul>
@@ -311,10 +387,13 @@ function ReviewCard({
   entry,
   position,
   count,
+  timeMs,
 }: {
   entry: ReviewEntry;
   position: number;
   count: number;
+  /** Total time spent on this question across every visit. */
+  timeMs: number;
 }) {
   const { label, Icon } = OUTCOME[entry.outcome];
 
@@ -328,6 +407,11 @@ function ReviewCard({
           <span className="review-item__number">Question {entry.displayNumber}</span>
           <span className="review-item__position">
             {position} of {count}
+          </span>
+          <span className="review-item__time">
+            <IconClock size={13} />
+            <span className="visually-hidden">Time spent: </span>
+            {formatDuration(timeMs)}
           </span>
         </span>
       </div>

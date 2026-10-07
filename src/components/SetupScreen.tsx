@@ -3,10 +3,21 @@ import { IconArrowRight, IconCheck, IconFile } from "./Icons";
 import { isQuestionLimit, type AttemptOptions } from "../lib/attempt";
 import { summarizeChoiceShape, totalChoices } from "../lib/choices";
 import { quizTitleFromFileName } from "../lib/display";
+import { formatLimit } from "../lib/formatTime";
+import {
+  MAX_CUSTOM_MINUTES,
+  MIN_CUSTOM_MINUTES,
+  TIME_LIMIT_PRESETS,
+  minutesToMs,
+  parseCustomMinutes,
+} from "../lib/timing";
 import type { SourceQuestion } from "../lib/types";
 
 /** Quiz-length presets. Only those shorter than the file are offered, plus "All". */
 const LENGTH_PRESETS = [5, 10, 15, 20, 30, 50];
+
+/** The time-limit select's value: "0" for none, a preset in minutes, or "custom". */
+type LimitChoice = "0" | `${(typeof TIME_LIMIT_PRESETS)[number]}` | "custom";
 
 /**
  * The setup state, shown once a file has validated and before the quiz starts.
@@ -23,14 +34,26 @@ export function SetupScreen({
 }: {
   fileName: string;
   questions: SourceQuestion[];
-  onStart: (options: AttemptOptions) => void;
+  onStart: (options: AttemptOptions, timeLimitMs: number | null) => void;
   onChangeFile: () => void;
 }) {
   const [shuffleQuestions, setShuffleQuestions] = useState(true);
   // 0 means "every question"; anything else is a preset that is shorter than the file.
   const [limit, setLimit] = useState(0);
+  const [limitChoice, setLimitChoice] = useState<LimitChoice>("0");
+  const [customMinutes, setCustomMinutes] = useState("");
   const shuffleId = useId();
   const lengthId = useId();
+  const timeId = useId();
+  const customId = useId();
+  const customErrorId = useId();
+
+  // The time limit the quiz will start with. Only the custom choice can be invalid, and
+  // then the Start button waits until it is fixed. Nothing starts ticking here.
+  const custom = limitChoice === "custom" ? parseCustomMinutes(customMinutes) : null;
+  const timeLimitMs =
+    limitChoice === "0" ? null : custom ? (custom.ok ? minutesToMs(custom.minutes) : null) : minutesToMs(Number(limitChoice));
+  const customInvalid = custom !== null && !custom.ok;
 
   const total = questions.length;
   const shape = useMemo(() => summarizeChoiceShape(questions), [questions]);
@@ -79,6 +102,10 @@ export function SetupScreen({
             <dt>Order</dt>
             <dd>{shuffleQuestions ? "Randomized" : "As written"}</dd>
           </div>
+          <div className="stat">
+            <dt>Time limit</dt>
+            <dd>{timeLimitMs === null ? (customInvalid ? "—" : "None") : formatLimit(timeLimitMs)}</dd>
+          </div>
         </dl>
 
         <fieldset className="options">
@@ -122,6 +149,62 @@ export function SetupScreen({
               </select>
             </div>
           )}
+
+          <div className="option option--stack">
+            <div className="option__row">
+              <label className="option__label" htmlFor={timeId}>
+                <span className="option__title">Time limit</span>
+                <span className="option__hint">
+                  The clock starts when you press Start quiz. When time runs out, the quiz is
+                  submitted for you.
+                </span>
+              </label>
+              <select
+                id={timeId}
+                className="select"
+                value={limitChoice}
+                onChange={(event) => setLimitChoice(event.target.value as LimitChoice)}
+              >
+                <option value="0">No time limit</option>
+                {TIME_LIMIT_PRESETS.map((minutes) => (
+                  <option key={minutes} value={String(minutes)}>
+                    {formatLimit(minutesToMs(minutes))}
+                  </option>
+                ))}
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+
+            {limitChoice === "custom" && (
+              <div className="option__row option__row--custom">
+                <label className="option__label" htmlFor={customId}>
+                  <span className="option__title">Custom length</span>
+                  <span className="option__hint">
+                    Whole minutes, {MIN_CUSTOM_MINUTES} to {MAX_CUSTOM_MINUTES}.
+                  </span>
+                </label>
+                <div className="custom-minutes">
+                  <input
+                    id={customId}
+                    className="input input--minutes"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={customMinutes}
+                    onChange={(event) => setCustomMinutes(event.target.value)}
+                    aria-invalid={customInvalid && customMinutes !== "" ? true : undefined}
+                    aria-describedby={customInvalid ? customErrorId : undefined}
+                  />
+                  <span className="custom-minutes__unit">min</span>
+                </div>
+                {customInvalid && (
+                  <p className="option__error" id={customErrorId} role="alert">
+                    {custom.message}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         </fieldset>
 
         <p className="ready__note">
@@ -132,9 +215,11 @@ export function SetupScreen({
           <button
             type="button"
             className="btn btn--primary btn--xl"
+            disabled={customInvalid}
             onClick={() =>
               onStart(
                 count === total ? { shuffleQuestions } : { shuffleQuestions, limit: count },
+                timeLimitMs,
               )
             }
           >

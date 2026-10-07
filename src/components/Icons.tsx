@@ -142,6 +142,13 @@ export const IconTrophy = (props: IconProps) => (
   </Svg>
 );
 
+export const IconClock = (props: IconProps) => (
+  <Svg {...props}>
+    <circle cx="10" cy="10" r="7" />
+    <path d="M10 6v4l2.6 1.6" />
+  </Svg>
+);
+
 export const IconPencil = (props: IconProps) => (
   <Svg {...props}>
     <path d="M13.2 3.6l3.2 3.2L7.2 16H4v-3.2z" />

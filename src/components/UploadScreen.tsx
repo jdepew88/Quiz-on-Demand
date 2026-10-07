@@ -34,7 +34,12 @@ export function UploadScreen({
   onStart,
   onSetupChange,
 }: {
-  onStart: (questions: SourceQuestion[], sourceName: string, options: AttemptOptions) => void;
+  onStart: (
+    questions: SourceQuestion[],
+    sourceName: string,
+    options: AttemptOptions,
+    timeLimitMs: number | null,
+  ) => void;
   /** Reports whether the setup state is showing, so the shell can adapt its header. */
   onSetupChange?: (open: boolean) => void;
 }) {
@@ -117,7 +122,7 @@ export function UploadScreen({
           <SetupScreen
             fileName={loaded.name}
             questions={questions}
-            onStart={(options) => onStart(questions, loaded.name, options)}
+            onStart={(options, timeLimitMs) => onStart(questions, loaded.name, options, timeLimitMs)}
             onChangeFile={() => setLoaded(null)}
           />
         </div>

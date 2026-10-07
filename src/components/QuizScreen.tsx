@@ -2,9 +2,12 @@ import { gsap } from "gsap";
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { ConfirmSubmitDialog } from "./ConfirmSubmitDialog";
 import { IconArrowLeft, IconArrowRight, IconCheck } from "./Icons";
+import { QuizTimer } from "./QuizTimer";
 import { countAnswered } from "../lib/attempt";
 import { choiceLabel } from "../lib/choices";
 import { EASE_OUT, navigationDirection, prefersReducedMotion, useGsapContext } from "../lib/motion";
+import { deadline, isExpired, type QuizTiming } from "../lib/timing";
+import { useNow } from "../lib/useNow";
 import type { QuizAttempt, Selections } from "../lib/types";
 
 /**
@@ -34,14 +37,22 @@ const CHOICE_STAGGER = 0.025;
 export function QuizScreen({
   attempt,
   selections,
+  timing,
   onSelect,
+  onActivate,
   onSubmit,
+  onExpire,
   onExit,
 }: {
   attempt: QuizAttempt;
   selections: Selections;
+  timing: QuizTiming;
   onSelect: (questionId: string, choiceId: string) => void;
+  /** The question now on screen; the clock starts a segment for it. */
+  onActivate: (questionId: string) => void;
   onSubmit: () => void;
+  /** The time limit ran out. Called once; the parent freezes the clock and grades. */
+  onExpire: () => void;
   onExit: () => void;
 }) {
   const [index, setIndex] = useState(0);
@@ -176,6 +187,39 @@ export function QuizScreen({
   const total = attempt.questions.length;
   const question = attempt.questions[index];
   const answered = countAnswered(attempt, selections);
+
+  // Per-question timing follows the question on screen. The model ignores a repeat for
+  // the question that is already active, so this is safe to run on every index change.
+  const activeId = question?.id;
+  useEffect(() => {
+    if (activeId !== undefined) onActivate(activeId);
+  }, [activeId, onActivate]);
+
+  // The clock display refreshes twice a second; the figures themselves come from
+  // timestamps, so a backgrounded tab catches up the moment it is looked at again.
+  const now = useNow(timing.completedAt === null);
+
+  // Expiry. A timeout is armed for the exact deadline, and every tick double-checks in
+  // case the browser throttled it (or the device slept through it). Either way `onExpire`
+  // fires once from here, and the parent ignores a repeat anyway.
+  const expired = useRef(false);
+  const expire = useCallback(() => {
+    if (expired.current) return;
+    expired.current = true;
+    onExpire();
+  }, [onExpire]);
+  useEffect(() => {
+    if (timing.completedAt !== null) return;
+    if (isExpired(timing, now)) expire();
+  }, [timing, now, expire]);
+  useEffect(() => {
+    const end = deadline(timing);
+    if (end === null || timing.completedAt !== null) return;
+    const id = window.setTimeout(() => {
+      if (isExpired(timing, Date.now())) expire();
+    }, Math.max(0, end - Date.now()) + 5);
+    return () => window.clearTimeout(id);
+  }, [timing, expire]);
   const unanswered = total - answered;
   const percentComplete = total === 0 ? 0 : Math.round((answered / total) * 100);
   const isLast = index === total - 1;
@@ -211,6 +255,7 @@ export function QuizScreen({
               {answered} answered · {unanswered} remaining
             </span>
           </p>
+          <QuizTimer timing={timing} now={now} />
           <div className="quiz-bar__actions">
             <button type="button" className="btn btn--quiet btn--sm" onClick={onExit}>
               New quiz

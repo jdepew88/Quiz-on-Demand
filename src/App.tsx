@@ -4,6 +4,13 @@ import { ResultsScreen } from "./components/ResultsScreen";
 import { SiteHeader } from "./components/SiteHeader";
 import { UploadScreen } from "./components/UploadScreen";
 import { buildAttempt, gradeAttempt, type AttemptOptions } from "./lib/attempt";
+import {
+  activateQuestion,
+  completeTiming,
+  startTiming,
+  type QuizTiming,
+  type SubmissionKind,
+} from "./lib/timing";
 import type { QuizAttempt, QuizResult, Selections, SourceQuestion } from "./lib/types";
 
 /**
@@ -14,15 +21,44 @@ import type { QuizAttempt, QuizResult, Selections, SourceQuestion } from "./lib/
  * the tab ends the session, which is exactly the privacy behaviour the app promises. (The one
  * thing kept on the device is the light/dark theme choice — see lib/theme.ts — which says
  * nothing about any quiz.)
+ *
+ * `timing` is the clock for the current attempt: it starts the moment the quiz starts,
+ * follows the active question as the learner moves around, and is frozen by `submitQuiz`
+ * so the results never drift afterwards. See lib/timing.ts.
  */
 interface SessionState {
   source: SourceQuestion[];
   sourceName: string;
   /** The setup-screen choices, kept so "Take it again" rebuilds the same kind of attempt. */
   options: AttemptOptions;
+  /** The chosen time limit, or null for an untimed quiz. Also reused by "Take it again". */
+  timeLimitMs: number | null;
   attempt: QuizAttempt;
+  timing: QuizTiming;
   selections: Selections;
   result: QuizResult | null;
+  /** How the attempt ended; null while it is still in progress. */
+  submission: SubmissionKind | null;
+}
+
+function newAttempt(
+  current: Pick<SessionState, "source" | "sourceName" | "options" | "timeLimitMs">,
+  attemptNumber: number,
+): SessionState {
+  const attempt = buildAttempt(current.source, attemptNumber, Math.random, current.options);
+  return {
+    ...current,
+    attempt,
+    // The clock starts here, on Start quiz (or Take it again) — never during upload or setup.
+    timing: startTiming(
+      attempt.questions.map((question) => question.id),
+      Date.now(),
+      current.timeLimitMs,
+    ),
+    selections: {},
+    result: null,
+    submission: null,
+  };
 }
 
 export function App() {
@@ -32,51 +68,58 @@ export function App() {
   const [setupOpen, setSetupOpen] = useState(false);
 
   const startQuiz = useCallback(
-    (questions: SourceQuestion[], sourceName: string, options: AttemptOptions) => {
-      setSession({
-        source: questions,
-        sourceName,
-        options,
-        attempt: buildAttempt(questions, 1, Math.random, options),
-        selections: {},
-        result: null,
-      });
+    (
+      questions: SourceQuestion[],
+      sourceName: string,
+      options: AttemptOptions,
+      timeLimitMs: number | null,
+    ) => {
+      setSession(newAttempt({ source: questions, sourceName, options, timeLimitMs }, 1));
     },
     [],
   );
 
   const selectChoice = useCallback((questionId: string, choiceId: string) => {
     setSession((current) =>
-      current === null
+      current === null || current.result
         ? current
         : { ...current, selections: { ...current.selections, [questionId]: choiceId } },
     );
   }, []);
 
-  const submitQuiz = useCallback(() => {
-    setSession((current) =>
-      current === null
-        ? current
-        : { ...current, result: gradeAttempt(current.attempt, current.selections) },
-    );
+  /** The learner moved to a question: close the previous timing segment, open this one. */
+  const activate = useCallback((questionId: string) => {
+    setSession((current) => {
+      if (current === null || current.result) return current;
+      const timing = activateQuestion(current.timing, questionId, Date.now());
+      return timing === current.timing ? current : { ...current, timing };
+    });
   }, []);
 
-  /** Same source questions and options, brand new randomized order and fresh choice order. */
-  const retake = useCallback(() => {
+  /**
+   * Freeze the clock and grade. Exactly once per attempt: a second call (a manual submit
+   * racing the deadline, or zero observed by two ticks) finds the result already set and
+   * does nothing. A timeout completes at the deadline itself, however late it is noticed.
+   */
+  const submitQuiz = useCallback((kind: SubmissionKind = "manual") => {
     setSession((current) =>
-      current === null
+      current === null || current.result
         ? current
         : {
             ...current,
-            attempt: buildAttempt(
-              current.source,
-              current.attempt.attemptNumber + 1,
-              Math.random,
-              current.options,
-            ),
-            selections: {},
-            result: null,
+            timing: completeTiming(current.timing, Date.now()),
+            result: gradeAttempt(current.attempt, current.selections),
+            submission: kind,
           },
+    );
+  }, []);
+
+  const expireQuiz = useCallback(() => submitQuiz("timeout"), [submitQuiz]);
+
+  /** Same source questions, options and time limit; brand new order and a fresh clock. */
+  const retake = useCallback(() => {
+    setSession((current) =>
+      current === null ? current : newAttempt(current, current.attempt.attemptNumber + 1),
     );
   }, []);
 
@@ -122,6 +165,8 @@ export function App() {
             result={session.result}
             sourceName={session.sourceName}
             attemptNumber={session.attempt.attemptNumber}
+            timing={session.timing}
+            submission={session.submission ?? "manual"}
             onRetake={retake}
             onNewQuiz={resetToUpload}
           />
@@ -133,8 +178,11 @@ export function App() {
             key={session.attempt.attemptNumber}
             attempt={session.attempt}
             selections={session.selections}
+            timing={session.timing}
             onSelect={selectChoice}
+            onActivate={activate}
             onSubmit={submitQuiz}
+            onExpire={expireQuiz}
             onExit={resetToUpload}
           />
         )}
