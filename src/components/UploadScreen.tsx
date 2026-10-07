@@ -7,12 +7,22 @@ import {
   type DragEvent,
   type MouseEvent,
 } from "react";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { FormatGuide, SAMPLE_FILE } from "./FormatGuide";
 import { HeroVisual } from "./HeroVisual";
 import { IconAlert, IconBook, IconPlay, IconUpload } from "./Icons";
 import { PrivacyNote } from "./PrivacyNote";
-import { SetupScreen } from "./SetupScreen";
+import { SavedQuizzes } from "./SavedQuizzes";
+import { SetupScreen, type SaveState } from "./SetupScreen";
 import type { AttemptOptions } from "../lib/attempt";
+import {
+  getSavedQuiz,
+  hasSavedQuiz,
+  listSavedQuizzes,
+  removeSavedQuiz,
+  saveQuiz,
+  type SavedQuizSummary,
+} from "../lib/savedQuizzes";
 import { useHeroEntrance } from "../lib/useHeroEntrance";
 import { parseQuizFile, type ValidationResult } from "../lib/validation";
 import type { SourceQuestion } from "../lib/types";
@@ -22,8 +32,14 @@ const MAX_ISSUES_SHOWN = 25;
 
 interface LoadedFile {
   name: string;
+  /** The file's text, verbatim — what "Save this quiz" stores. */
+  text: string;
   result: ValidationResult;
+  /** Whether this quiz is already the browser's saved copy. */
+  fromSaved: boolean;
 }
+
+const SAVE_FAILED = "Couldn’t save this quiz in your browser. You can still use the uploaded file normally.";
 
 /**
  * The landing screen. Hierarchy, top to bottom: what this does, the upload control, three
@@ -47,6 +63,15 @@ export function UploadScreen({
   const [dragging, setDragging] = useState(false);
   const [readError, setReadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Saved quizzes: the list for the landing page, the state of the save action for the
+  // loaded file, and the two confirmations. All of it is best-effort; a browser without
+  // IndexedDB simply has an empty list and a save button that reports it could not save.
+  const [saved, setSaved] = useState<SavedQuizSummary[]>([]);
+  const [savedError, setSavedError] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [confirmReplace, setConfirmReplace] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const statusRef = useRef<HTMLDivElement>(null);
@@ -56,12 +81,110 @@ export function UploadScreen({
   // highlight from flickering as the pointer crosses the inner text.
   const dragDepth = useRef(0);
 
-  const acceptText = useCallback((name: string, text: string) => {
+  const refreshSaved = useCallback(async () => {
+    try {
+      setSaved(await listSavedQuizzes());
+      setSavedError(null);
+    } catch {
+      // No IndexedDB (or it refused to open): the landing page just has no saved list.
+      setSaved([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    listSavedQuizzes()
+      .then((items) => {
+        if (active) setSaved(items);
+      })
+      .catch(() => {
+        if (active) setSaved([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  /** Every way in — upload, sample, saved copy — ends here, through the same parser. */
+  const acceptText = useCallback((name: string, text: string, fromSaved = false) => {
     setReadError(null);
-    setLoaded({ name, result: parseQuizFile(text) });
+    setLoaded({ name, text, result: parseQuizFile(text), fromSaved });
+    setSaveState(fromSaved ? "saved" : "idle");
+    setSaveMessage(null);
     // Move the reader to the outcome — it replaces the landing, or appears below the drop area.
     window.requestAnimationFrame(() => statusRef.current?.focus());
   }, []);
+
+  const writeSave = useCallback(
+    async (name: string, text: string) => {
+      setSaveState("saving");
+      setSaveMessage(null);
+      try {
+        await saveQuiz(name, text);
+        setSaveState("saved");
+        setSaveMessage("Saved locally");
+        await refreshSaved();
+      } catch {
+        setSaveState("error");
+        setSaveMessage(SAVE_FAILED);
+      }
+    },
+    [refreshSaved],
+  );
+
+  /** "Save this quiz": straight to the store, or ask first when the name is taken. */
+  const requestSave = useCallback(async () => {
+    if (!loaded) return;
+    let exists = false;
+    try {
+      exists = await hasSavedQuiz(loaded.name);
+    } catch {
+      // Cannot even ask: let the save itself fail and explain.
+    }
+    if (exists) setConfirmReplace(true);
+    else await writeSave(loaded.name, loaded.text);
+  }, [loaded, writeSave]);
+
+  const openSaved = useCallback(
+    async (name: string) => {
+      setBusy(true);
+      try {
+        const record = await getSavedQuiz(name);
+        if (!record) {
+          setSavedError(`“${name}” is no longer saved in this browser.`);
+          await refreshSaved();
+          return;
+        }
+        acceptText(record.name, record.text, true);
+      } catch (error) {
+        // A damaged entry, or the store refusing to open. The entry stays listed so it
+        // can be removed.
+        setSavedError(
+          error instanceof Error && error.message
+            ? error.message
+            : `“${name}” could not be opened from this browser’s saved quizzes.`,
+        );
+      } finally {
+        setBusy(false);
+      }
+    },
+    [acceptText, refreshSaved],
+  );
+
+  const removeSaved = useCallback(
+    async (name: string) => {
+      setConfirmRemove(null);
+      try {
+        await removeSavedQuiz(name);
+        setSavedError(null);
+        if (loaded?.name === name && loaded.fromSaved) setSaveState("idle");
+      } catch {
+        setSavedError(`“${name}” could not be removed. Try again, or clear this site’s data.`);
+      }
+      await refreshSaved();
+    },
+    [loaded, refreshSaved],
+  );
 
   const readFile = useCallback(
     async (file: File) => {
@@ -115,6 +238,31 @@ export function UploadScreen({
     onSetupChange?.(questions !== null);
   }, [questions, onSetupChange]);
 
+  const replaceDialog = confirmReplace && loaded && (
+    <ConfirmDialog
+      title={`“${loaded.name}” is already saved`}
+      confirmLabel="Replace"
+      onCancel={() => setConfirmReplace(false)}
+      onConfirm={() => {
+        setConfirmReplace(false);
+        void writeSave(loaded.name, loaded.text);
+      }}
+    >
+      <p>Replace the saved copy with this file? The saved copy keeps the same name.</p>
+    </ConfirmDialog>
+  );
+
+  const removeDialog = confirmRemove !== null && (
+    <ConfirmDialog
+      title={`Remove “${confirmRemove}” from Saved quizzes?`}
+      confirmLabel="Remove"
+      onCancel={() => setConfirmRemove(null)}
+      onConfirm={() => void removeSaved(confirmRemove)}
+    >
+      <p>This removes only the copy saved in this browser. Your original file is not affected.</p>
+    </ConfirmDialog>
+  );
+
   if (questions && loaded) {
     return (
       <div className="container">
@@ -122,10 +270,14 @@ export function UploadScreen({
           <SetupScreen
             fileName={loaded.name}
             questions={questions}
+            saveState={saveState}
+            saveMessage={saveMessage}
+            onSave={() => void requestSave()}
             onStart={(options, timeLimitMs) => onStart(questions, loaded.name, options, timeLimitMs)}
             onChangeFile={() => setLoaded(null)}
           />
         </div>
+        {replaceDialog}
       </div>
     );
   }
@@ -309,7 +461,16 @@ export function UploadScreen({
         <PrivacyNote />
       </section>
 
+      <SavedQuizzes
+        items={saved}
+        error={savedError}
+        busy={busy}
+        onOpen={(name) => void openSaved(name)}
+        onRemove={(name) => setConfirmRemove(name)}
+      />
+
       <FormatGuide />
+      {removeDialog}
     </div>
   );
 }

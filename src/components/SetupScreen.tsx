@@ -16,6 +16,9 @@ import type { SourceQuestion } from "../lib/types";
 /** Quiz-length presets. Only those shorter than the file are offered, plus "All". */
 const LENGTH_PRESETS = [5, 10, 15, 20, 30, 50];
 
+/** Where the loaded file stands with the browser's saved copy. */
+export type SaveState = "idle" | "saving" | "saved" | "error";
+
 /** The time-limit select's value: "0" for none, a preset in minutes, or "custom". */
 type LimitChoice = "0" | `${(typeof TIME_LIMIT_PRESETS)[number]}` | "custom";
 
@@ -29,11 +32,18 @@ type LimitChoice = "0" | `${(typeof TIME_LIMIT_PRESETS)[number]}` | "custom";
 export function SetupScreen({
   fileName,
   questions,
+  saveState,
+  saveMessage,
+  onSave,
   onStart,
   onChangeFile,
 }: {
   fileName: string;
   questions: SourceQuestion[];
+  saveState: SaveState;
+  /** "Saved locally", or why saving failed. Announced politely; never required reading. */
+  saveMessage: string | null;
+  onSave: () => void;
   onStart: (options: AttemptOptions, timeLimitMs: number | null) => void;
   onChangeFile: () => void;
 }) {
@@ -83,6 +93,29 @@ export function SetupScreen({
               <span>{fileName}</span>
               <span className="ready__file-status">· loaded successfully</span>
             </p>
+            <div className="save-quiz">
+              {saveState === "saved" ? (
+                <span className="save-quiz__done">
+                  <IconCheck size={14} /> Saved locally
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn--secondary btn--sm"
+                  onClick={onSave}
+                  disabled={saveState === "saving"}
+                >
+                  {saveState === "saving" ? "Saving…" : "Save this quiz"}
+                </button>
+              )}
+              <span className="save-quiz__hint">Saved quizzes stay in this browser.</span>
+              <span className="visually-hidden" aria-live="polite">
+                {saveMessage ?? ""}
+              </span>
+              {saveState === "error" && saveMessage && (
+                <span className="save-quiz__error">{saveMessage}</span>
+              )}
+            </div>
           </div>
         </div>
 
