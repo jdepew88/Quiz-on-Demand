@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { gsap } from "gsap";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { ConfirmSubmitDialog } from "./ConfirmSubmitDialog";
 import { IconArrowLeft, IconArrowRight, IconCheck } from "./Icons";
 import { countAnswered } from "../lib/attempt";
 import { choiceLabel } from "../lib/choices";
+import { EASE_OUT, navigationDirection, prefersReducedMotion, useGsapContext } from "../lib/motion";
 import type { QuizAttempt, Selections } from "../lib/types";
 
 /**
@@ -10,6 +12,17 @@ import type { QuizAttempt, Selections } from "../lib/types";
  * the segments would be too thin to read, so a continuous bar takes over.
  */
 const MAX_PROGRESS_SEGMENTS = 40;
+
+/**
+ * Question transition: the outgoing question fades a few pixels in the direction of travel,
+ * React swaps the content, and the incoming one fades in from the opposite side with the
+ * answer rows a beat behind. Fast enough that the user is never waiting on it.
+ */
+const EXIT_DISTANCE = 14;
+const ENTER_DISTANCE = 18;
+const EXIT_DURATION = 0.14;
+const ENTER_DURATION = 0.22;
+const CHOICE_STAGGER = 0.025;
 
 /**
  * The quiz screen. The question is the visual centre; progress sits in a slim sticky bar
@@ -34,9 +47,17 @@ export function QuizScreen({
   const [index, setIndex] = useState(0);
   const [confirming, setConfirming] = useState(false);
   const promptRef = useRef<HTMLLegendElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const progressRef = useRef<HTMLDivElement>(null);
   // Only move focus for a deliberate navigation, never on first paint — otherwise the
   // page would yank focus away the moment the quiz opens.
   const shouldFocusPrompt = useRef(false);
+  // The exit tween in flight, if any, and the question it is heading for. React's index
+  // only changes once the exit has finished (or been cut short by another navigation).
+  const exitTween = useRef<gsap.core.Tween | null>(null);
+  const pendingIndex = useRef<number | null>(null);
+  // Which way the question just changed, read by the enter animation: 0 on first paint.
+  const enterDirection = useRef<-1 | 0 | 1>(0);
 
   useEffect(() => {
     if (shouldFocusPrompt.current) {
@@ -47,11 +68,110 @@ export function QuizScreen({
 
   const goTo = useCallback(
     (next: number) => {
+      const target = Math.min(Math.max(next, 0), attempt.questions.length - 1);
+      // Navigating again mid-transition: drop the half-finished exit and jump straight to
+      // the newest target, so rapid Next presses land where the user expects.
+      const from = pendingIndex.current ?? index;
+      if (target === from) return;
+      const direction = navigationDirection(index, target);
       shouldFocusPrompt.current = true;
-      setIndex(Math.min(Math.max(next, 0), attempt.questions.length - 1));
+
+      const inner = cardRef.current?.querySelector<HTMLElement>(".question-card__inner");
+      if (exitTween.current || prefersReducedMotion() || !inner) {
+        exitTween.current?.kill();
+        exitTween.current = null;
+        pendingIndex.current = null;
+        if (target === index) {
+          // Reversed mid-exit back to the question still on screen: bring it back.
+          if (inner) gsap.to(inner, { x: 0, opacity: 1, duration: 0.12, clearProps: "transform,opacity" });
+          return;
+        }
+        enterDirection.current = prefersReducedMotion() ? 0 : direction;
+        setIndex(target);
+        return;
+      }
+
+      pendingIndex.current = target;
+      exitTween.current = gsap.to(inner, {
+        x: -EXIT_DISTANCE * direction,
+        opacity: 0,
+        duration: EXIT_DURATION,
+        ease: "power1.in",
+        onComplete: () => {
+          exitTween.current = null;
+          pendingIndex.current = null;
+          enterDirection.current = direction;
+          setIndex(target);
+        },
+      });
     },
-    [attempt.questions.length],
+    [attempt.questions.length, index],
   );
+
+  // Previous/Next count from where the user is *heading*, not where React still is, so two
+  // quick presses advance two questions.
+  const step = useCallback(
+    (delta: -1 | 1) => goTo((pendingIndex.current ?? index) + delta),
+    [goTo, index],
+  );
+
+  useEffect(
+    () => () => {
+      exitTween.current?.kill();
+    },
+    [],
+  );
+
+  // Enter: the new question (a fresh keyed element) settles in from the direction of
+  // travel, then its answer rows follow with a tiny stagger. Skipped on first paint, when
+  // no navigation has set a direction yet. The direction is deliberately not consumed
+  // here: this effect only re-runs for a new index (always preceded by goTo) or for React
+  // Strict Mode's development rehearsal, which should replay the same entrance.
+  useGsapContext(
+    cardRef,
+    (card) => {
+      const direction = enterDirection.current;
+      if (direction === 0 || prefersReducedMotion()) return;
+
+      const inner = card.querySelector<HTMLElement>(".question-card__inner");
+      if (!inner) return;
+      inner.dataset.direction = direction > 0 ? "next" : "previous";
+
+      const tl = gsap.timeline({ defaults: { ease: EASE_OUT, clearProps: "transform,opacity" } });
+      tl.from(inner, { x: ENTER_DISTANCE * direction, opacity: 0, duration: ENTER_DURATION }).from(
+        inner.querySelectorAll(".choice"),
+        { y: 6, opacity: 0, duration: 0.2, stagger: CHOICE_STAGGER },
+        0.05,
+      );
+
+      // The current progress segment fills from the left rather than snapping.
+      const segment = progressRef.current?.querySelector(".progress__segment--current");
+      if (segment) {
+        tl.from(segment, { scaleX: 0.35, transformOrigin: "left center", duration: 0.3 }, 0);
+      }
+    },
+    [index],
+  );
+
+  // Selection feedback on top of the CSS state: the row and its letter badge give the
+  // smallest possible press response. Keyboard selection gets the same.
+  function handleSelect(event: ChangeEvent<HTMLInputElement>, questionId: string, choiceId: string) {
+    onSelect(questionId, choiceId);
+    if (prefersReducedMotion()) return;
+    const row = event.currentTarget.closest<HTMLElement>(".choice");
+    const letter = row?.querySelector<HTMLElement>(".choice__letter");
+    if (!row || !letter) return;
+    gsap.fromTo(
+      row,
+      { scale: 0.985 },
+      { scale: 1, duration: 0.25, ease: EASE_OUT, overwrite: "auto", clearProps: "transform" },
+    );
+    gsap.fromTo(
+      letter,
+      { scale: 0.85 },
+      { scale: 1, duration: 0.3, ease: EASE_OUT, overwrite: "auto", clearProps: "transform" },
+    );
+  }
 
   const total = attempt.questions.length;
   const question = attempt.questions[index];
@@ -107,6 +227,7 @@ export function QuizScreen({
 
         <div className="container container--reading">
           <div
+            ref={progressRef}
             className={`progress${total <= MAX_PROGRESS_SEGMENTS ? " progress--segmented" : ""}`}
             role="progressbar"
             aria-valuemin={0}
@@ -136,9 +257,10 @@ export function QuizScreen({
       </div>
 
       <div className="container container--reading quiz">
-        <div className="question-card">
-          {/* Keyed on the question so each one enters with a brief fade — the change of
-              question is felt, not just read in the progress bar. */}
+        <div className="question-card" ref={cardRef}>
+          {/* Keyed on the question so each one mounts fresh; the enter animation above
+              targets this element, so the change of question is felt, not just read in
+              the progress bar. */}
           <div key={question.id} className="question-card__inner">
             <div className="question-card__meta">
               <span className="question-card__number">Question {index + 1}</span>
@@ -175,7 +297,7 @@ export function QuizScreen({
                         name={question.id}
                         value={choice.id}
                         checked={selected}
-                        onChange={() => onSelect(question.id, choice.id)}
+                        onChange={(event) => handleSelect(event, question.id, choice.id)}
                       />
                       {/* Computed, so a question with five or six choices is labelled E
                           and F rather than falling off the end of a fixed A-D list.
@@ -201,7 +323,7 @@ export function QuizScreen({
             <button
               type="button"
               className="btn btn--quiet"
-              onClick={() => goTo(index - 1)}
+              onClick={() => step(-1)}
               disabled={index === 0}
             >
               <IconArrowLeft size={18} /> Previous
@@ -218,7 +340,7 @@ export function QuizScreen({
               <button
                 type="button"
                 className="btn btn--primary btn--lg"
-                onClick={() => goTo(index + 1)}
+                onClick={() => step(1)}
               >
                 Next question <IconArrowRight size={18} />
               </button>

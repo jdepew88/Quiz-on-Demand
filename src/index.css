@@ -1920,9 +1920,8 @@ pre.code {
   box-shadow: var(--shadow-md);
 }
 
-.question-card__inner {
-  animation: qod-rise var(--dur-2) var(--ease-out) both;
-}
+/* .question-card__inner is entered by GSAP (QuizScreen): a short directional fade keyed
+   to Next / Previous, with no CSS animation of its own. */
 
 .question-card__meta {
   display: flex;
@@ -2002,8 +2001,7 @@ pre.code {
   transition:
     border-color var(--dur-1) ease,
     background-color var(--dur-1) ease,
-    box-shadow var(--dur-1) ease,
-    transform var(--dur-1) ease;
+    box-shadow var(--dur-1) ease;
 }
 
 .choice:hover {
@@ -2290,7 +2288,6 @@ pre.code {
   background: var(--color-surface);
   box-shadow: var(--shadow-md);
   text-align: center;
-  animation: qod-rise var(--dur-3) var(--ease-out) both;
 }
 
 /* Two quiet decorative marks in the corners — the same shapes as the landing page. */
@@ -2375,6 +2372,83 @@ pre.code {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+
+.score__percent-inner {
+  position: relative;
+  display: inline-block;
+  padding-inline: 0.3em;
+}
+
+.score__percent-value {
+  position: relative;
+  z-index: 1;
+}
+
+/* Perfect score: the homepage's gold highlighter block, swept in behind the figure by GSAP
+   (it scales from the left). Static at full width under reduced motion. */
+.score__sweep {
+  position: absolute;
+  inset: 22% 0 8%;
+  border-radius: 2px;
+  background: var(--color-highlight-soft);
+  pointer-events: none;
+}
+
+.score--perfect .score__percent {
+  color: var(--color-text);
+}
+
+/* The burst: positioned here, moved and faded by GSAP, never rendered under reduced motion
+   and never looping. Sized against the figure so it scales with the type. */
+.score__burst {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.score__spark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  --spark-color: var(--color-highlight);
+  --spark-x: 0;
+  --spark-y: 0;
+  --spark-r: 0deg;
+  margin: calc(var(--spark-y) * 1em) 0 0 calc(var(--spark-x) * 1em);
+  transform: rotate(var(--spark-r));
+}
+
+.score__spark--line {
+  width: 0.9em;
+  height: 0.16em;
+  border-radius: 1em;
+  background: var(--spark-color);
+}
+
+.score__spark--dot {
+  width: 0.32em;
+  height: 0.32em;
+  border-radius: 50%;
+  background: var(--spark-color);
+}
+
+.score__spark--star {
+  width: 0.5em;
+  height: 0.5em;
+  background: var(--spark-color);
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+}
+
+.score__spark:nth-child(1) { --spark-x: -3.4; --spark-y: -1.2; --spark-r: -32deg; }
+.score__spark:nth-child(2) { --spark-x: -2.6; --spark-y: 0.9; --spark-color: var(--color-accent); }
+.score__spark:nth-child(3) { --spark-x: -2.9; --spark-y: -0.2; --spark-r: 15deg; }
+.score__spark:nth-child(4) { --spark-x: -1.6; --spark-y: -1.6; --spark-r: -70deg; }
+.score__spark:nth-child(5) { --spark-x: -0.3; --spark-y: -1.5; --spark-color: var(--color-accent-soft-border); }
+.score__spark:nth-child(6) { --spark-x: 1.3; --spark-y: -1.6; --spark-r: 70deg; }
+.score__spark:nth-child(7) { --spark-x: 2.6; --spark-y: -0.4; --spark-r: -15deg; }
+.score__spark:nth-child(8) { --spark-x: 2.4; --spark-y: 0.9; --spark-color: var(--color-accent); }
+.score__spark:nth-child(9) { --spark-x: 2.7; --spark-y: -1.3; --spark-r: 32deg; }
+.score__spark:nth-child(10) { --spark-x: 0.4; --spark-y: 1.2; --spark-color: var(--color-accent-soft-border); }
 
 .result-cards {
   display: grid;

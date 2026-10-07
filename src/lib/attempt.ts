@@ -122,6 +122,21 @@ export function formatPercent(percent: number): string {
   return `${Number.isInteger(percent) ? percent : percent.toFixed(1)}%`;
 }
 
+/**
+ * A genuinely perfect run: every graded question correct and nothing skipped. Decided from
+ * the counts, never from the rounded percentage, so 99.6% displayed as "100%" does not
+ * qualify.
+ */
+export function isPerfectScore(result: QuizResult): boolean {
+  return (
+    result.total > 0 &&
+    result.correct === result.total &&
+    result.incorrect === 0 &&
+    result.unanswered === 0 &&
+    result.percent === 100
+  );
+}
+
 /** How many questions in the attempt have a selection recorded. */
 export function countAnswered(attempt: QuizAttempt, selections: Selections): number {
   return attempt.questions.filter((question) => Boolean(selections[question.id])).length;

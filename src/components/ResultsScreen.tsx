@@ -1,7 +1,9 @@
+import { gsap } from "gsap";
 import { useMemo, useRef, useState } from "react";
 import { IconCheck, IconMinus, IconRefresh, IconTrophy, IconX } from "./Icons";
-import { formatPercent } from "../lib/attempt";
+import { formatPercent, isPerfectScore } from "../lib/attempt";
 import { choiceLabel } from "../lib/choices";
+import { EASE_OUT, prefersReducedMotion, useGsapContext } from "../lib/motion";
 import type { QuizResult, ReviewEntry, ReviewOutcome } from "../lib/types";
 
 type Filter = "all" | "incorrect" | "unanswered";
@@ -19,6 +21,27 @@ const REVIEW_TITLE: Record<Filter, string> = {
   unanswered: "Review unanswered questions",
 };
 
+/**
+ * The perfect-score burst: a handful of gold lines, green and gold dots and two sparks
+ * around the percentage. Positioned by CSS (`.score__spark:nth-child(n)`); GSAP only
+ * moves them the last stretch into place and fades them out again. Decorative, hidden
+ * from assistive technology, and not rendered at all under reduced motion.
+ */
+const SPARKS: ("line" | "dot" | "star")[] = [
+  "line",
+  "dot",
+  "star",
+  "line",
+  "dot",
+  "line",
+  "star",
+  "dot",
+  "line",
+  "dot",
+];
+
+const COUNT_UP = 0.8;
+
 export function ResultsScreen({
   result,
   sourceName,
@@ -34,6 +57,95 @@ export function ResultsScreen({
 }) {
   const [filter, setFilter] = useState<Filter>("all");
   const reviewHeadingRef = useRef<HTMLHeadingElement>(null);
+  const scoreRef = useRef<HTMLElement>(null);
+  const percentRef = useRef<HTMLSpanElement>(null);
+  const perfect = isPerfectScore(result);
+  const percentText = formatPercent(result.percent);
+  // Read once per mount: the burst markup is left out entirely under reduced motion.
+  const [reduceMotion] = useState(prefersReducedMotion);
+
+  // Results entrance. Everything is in the DOM at its final value from the first render;
+  // GSAP fades the pieces in, counts the percentage up from zero (rounded whole numbers,
+  // then the exact formatted value), and for a genuine 100% sweeps the gold highlight in
+  // behind the figure and lets the sparks out before the stat cards arrive. One pass, then
+  // static. The score section is remounted for every attempt, so nothing can stack up.
+  useGsapContext(
+    scoreRef,
+    (root) => {
+      if (reduceMotion) {
+        root.dataset.entrance = "static";
+        return;
+      }
+      root.dataset.entrance = "playing";
+      const percentEl = percentRef.current;
+
+      // Elements that end at rest hand their styling back to the stylesheet; the counter
+      // below is a plain object, so this is not a timeline default.
+      const settle = { clearProps: "transform,opacity" };
+      const tl = gsap.timeline({
+        defaults: { ease: EASE_OUT },
+        onComplete: () => {
+          root.dataset.entrance = "done";
+        },
+      });
+
+      tl.from(
+        [".score__badge", ".score__title", ".score__eyebrow", ".score__raw", ".score__percent"],
+        { y: 10, opacity: 0, duration: 0.4, stagger: 0.05, ...settle },
+      );
+
+      if (percentEl) {
+        const counter = { value: 0 };
+        tl.to(
+          counter,
+          {
+            value: result.percent,
+            duration: COUNT_UP,
+            ease: "power2.out",
+            onUpdate: () => {
+              percentEl.textContent = `${Math.round(counter.value)}%`;
+            },
+            onComplete: () => {
+              percentEl.textContent = percentText;
+            },
+          },
+          0.2,
+        );
+      }
+
+      // The stat cards, then the footer line and actions. For a perfect run they wait for
+      // the celebration; otherwise they overlap the count-up so the whole thing stays short.
+      let cardsAt = 0.3;
+
+      if (perfect) {
+        const at = 0.2 + COUNT_UP;
+        tl.from(".score__sweep", { scaleX: 0, transformOrigin: "left center", duration: 0.35, ...settle }, at - 0.1);
+        tl.from(
+          ".score__spark",
+          {
+            x: (index) => (index % 2 ? 10 : -10),
+            y: (index) => (index % 3 ? -8 : 8),
+            scale: 0.2,
+            rotation: (index) => (index % 2 ? 25 : -25),
+            opacity: 0,
+            duration: 0.4,
+            stagger: { each: 0.03, from: "center" },
+          },
+          at,
+        );
+        tl.to(".score__spark", { opacity: 0, duration: 0.4, stagger: 0.02 }, at + 0.75);
+        cardsAt = at + 0.45;
+      }
+
+      tl.from(".result-card", { y: 10, opacity: 0, duration: 0.35, stagger: 0.05, ...settle }, cardsAt);
+      tl.from(
+        [".score__meta", ".score__actions"],
+        { y: 6, opacity: 0, duration: 0.3, stagger: 0.05, ...settle },
+        cardsAt + 0.15,
+      );
+    },
+    [result, perfect, percentText, reduceMotion],
+  );
 
   const visible = useMemo(() => {
     if (filter === "all") return result.entries;
@@ -66,14 +178,18 @@ export function ResultsScreen({
 
   return (
     <div className="container container--reading results">
-      <section className="score" aria-labelledby="score-heading">
+      <section
+        className={`score${perfect ? " score--perfect" : ""}`}
+        aria-labelledby="score-heading"
+        ref={scoreRef}
+      >
         <span className="score__badge" aria-hidden="true">
           <IconTrophy size={28} />
         </span>
         <h1 id="score-heading" className="score__title">
           Quiz complete!
         </h1>
-        <p className="score__eyebrow">Your score</p>
+        <p className="score__eyebrow">{perfect ? "Perfect score" : "Your score"}</p>
 
         <p className="score__raw">
           <span className="score__visual" aria-hidden="true">
@@ -84,7 +200,24 @@ export function ResultsScreen({
             {result.correct} out of {result.total} correct
           </span>
         </p>
-        <p className="score__percent">{formatPercent(result.percent)}</p>
+        <p className="score__percent">
+          <span className="score__percent-inner">
+            {perfect && <span className="score__sweep" aria-hidden="true" />}
+            {/* The visible figure counts up; the hidden copy always carries the real value
+                so assistive technology never reads a number mid-count. */}
+            <span className="score__percent-value" ref={percentRef} aria-hidden="true">
+              {percentText}
+            </span>
+            <span className="visually-hidden">{percentText}</span>
+            {perfect && !reduceMotion && (
+              <span className="score__burst" aria-hidden="true">
+                {SPARKS.map((kind, index) => (
+                  <span key={index} className={`score__spark score__spark--${kind}`} />
+                ))}
+              </span>
+            )}
+          </span>
+        </p>
 
         <dl className="result-cards">
           <div className="result-card result-card--correct">

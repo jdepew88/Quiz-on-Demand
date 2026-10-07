@@ -13,6 +13,7 @@ import { IconAlert, IconBook, IconPlay, IconUpload } from "./Icons";
 import { PrivacyNote } from "./PrivacyNote";
 import { SetupScreen } from "./SetupScreen";
 import type { AttemptOptions } from "../lib/attempt";
+import { useHeroEntrance } from "../lib/useHeroEntrance";
 import { parseQuizFile, type ValidationResult } from "../lib/validation";
 import type { SourceQuestion } from "../lib/types";
 
@@ -44,6 +45,8 @@ export function UploadScreen({
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const statusRef = useRef<HTMLDivElement>(null);
+  const heroRef = useRef<HTMLElement>(null);
+  useHeroEntrance(heroRef);
   // Nested dragenter/dragleave events fire for child elements too; counting them keeps the
   // highlight from flickering as the pointer crosses the inner text.
   const dragDepth = useRef(0);
@@ -124,7 +127,7 @@ export function UploadScreen({
 
   return (
     <div className="container landing">
-      <section className="hero" aria-labelledby="hero-title">
+      <section className="hero" aria-labelledby="hero-title" ref={heroRef}>
         <div className="hero__copy">
           <p className="eyebrow hero__eyebrow">Quiz on Demand</p>
           <h1 id="hero-title" className="hero__title">
